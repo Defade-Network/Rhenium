@@ -47,6 +47,7 @@ public class ServerManager {
     public void start() {
         this.rheniumClientKey = RedisConstants.RHENIUM_CLIENT_KEY.apply(rhenium.getRheniumId());
         listenForServerEvents();
+        listenForPlayerMoveRequests();
 
         rhenium.getTimer().scheduleAtFixedRate(new TimerTask() {
             @Override
@@ -120,6 +121,42 @@ public class ServerManager {
                     }
                 }
             }, RedisConstants.GAME_SERVER_CREATE_CHANNEL, RedisConstants.GAME_SERVER_CREATE_ACKNOWLEDGE_CHANNEL);
+        });
+    }
+
+    private void listenForPlayerMoveRequests() {
+        Thread.ofVirtual().start(() -> {
+            rhenium.getJedisPool().subscribe(new JedisPubSub() {
+                @Override
+                public void onMessage(String channel, String message) {
+                    // MinecraftServer.getJedis().publish("rhenium:player_send_to_server_request", this.getUuid() + "," + serverName);
+                    String[] parts = message.split(",");
+                    String uuid = parts[0];
+                    String serverName = parts[1];
+
+                    // Find the server with the most players
+                    GameServer targetServer = null;
+                    int maxPlayers = 0;
+                    for (GameServer gameServer : gameServers.values()) {
+                        boolean canJoin = rhenium.getJedisPool().hget(RedisConstants.GAME_SERVER_KEY
+                                .apply(gameServer.getServerId()), RedisConstants.GAME_SERVER_SCHEDULED_FOR_STOP).equals("true");
+                        if (!canJoin) continue;
+
+                        int playerCount = Integer.parseInt(rhenium.getJedisPool().hget(RedisConstants.GAME_SERVER_KEY
+                                .apply(gameServer.getServerId()), RedisConstants.GAME_SERVER_PLAYERS_COUNT));
+                        if (gameServer.getServerTemplate().getServerName().equals(serverName)
+                                && playerCount < gameServer.getServerTemplate().getMaxPlayers()
+                                && playerCount > maxPlayers) {
+                            targetServer = gameServer;
+                            maxPlayers = playerCount;
+                        }
+                    }
+
+                    if (targetServer != null) {
+                        rhenium.getJedisPool().publish(RedisConstants.PLAYER_SEND_TO_SERVER_PROXY_CHANNEL, uuid + "," + targetServer.getServerId());
+                    }
+                }
+            }, RedisConstants.PLAYER_SEND_TO_SERVER_REQUEST_CHANNEL);
         });
     }
 

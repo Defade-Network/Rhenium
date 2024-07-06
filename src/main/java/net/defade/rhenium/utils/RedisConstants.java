@@ -93,4 +93,14 @@ public class RedisConstants {
      * Pub/Sub channel to stop a server.
      */
     public static final String GAME_SERVER_STOP_CHANNEL = "rhenium:game_server_stop";
+
+    /**
+     * Pub/Sub channel to receive requests to move a player to a server
+     */
+    public static final String PLAYER_SEND_TO_SERVER_REQUEST_CHANNEL = "rhenium:player_send_to_server_request";
+
+    /**
+     * Pub/Sub channel to send a player to a server with the proxy
+     */
+    public static final String PLAYER_SEND_TO_SERVER_PROXY_CHANNEL = "rhenium:player_send_to_server_proxy";
 }
