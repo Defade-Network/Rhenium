@@ -6,6 +6,7 @@ import com.mongodb.client.MongoClients;
 import com.mongodb.client.MongoDatabase;
 import net.defade.rhenium.config.RheniumConfig;
 import net.defade.rhenium.controller.LeaderTracker;
+import net.defade.rhenium.controller.ServerManager;
 import net.defade.rhenium.servers.ServerTemplateManager;
 import net.defade.rhenium.utils.Utils;
 import org.apache.logging.log4j.LogManager;
@@ -30,6 +31,7 @@ public class Rhenium {
     private final Timer timer = new Timer();
     private final ServerTemplateManager serverTemplateManager = new ServerTemplateManager(this);
     private final LeaderTracker leaderTracker = new LeaderTracker(this);
+    private final ServerManager serverManager = new ServerManager(this);
 
     public Rhenium(RheniumConfig rheniumConfig) {
         this.rheniumConfig = rheniumConfig;
@@ -65,8 +67,9 @@ public class Rhenium {
 
         serverTemplateManager.start();
         leaderTracker.start();
+        serverManager.start();
 
-        LOGGER.info("Rhenium has been started.");
+        LOGGER.info("Rhenium has been started with the id {}.", rheniumId);
         Runtime.getRuntime().addShutdownHook(new Thread(this::stop));
     }
 
@@ -81,8 +84,16 @@ public class Rhenium {
         LOGGER.info("Rhenium has shut down.");
     }
 
+    public RheniumConfig getRheniumConfig() {
+        return rheniumConfig;
+    }
+
     public Timer getTimer() {
         return timer;
+    }
+
+    public ServerTemplateManager getServerTemplateManager() {
+        return serverTemplateManager;
     }
 
     public JedisPooled getJedisPool() {
@@ -95,6 +106,10 @@ public class Rhenium {
 
     public String getRheniumId() {
         return rheniumId;
+    }
+
+    public boolean isLeader() {
+        return leaderTracker.isLeader();
     }
 
     private boolean isMongoConnected() {

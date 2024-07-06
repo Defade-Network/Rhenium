@@ -7,3 +7,13 @@ password = ""
 [mongodb]
 connection-string = "mongodb://localhost:27017"
 database = "defade"
+
+[network-settings]
+available-power = 200
+
+# The IP address of the server that the proxy will have to use to connect to the servers
+public-server-ip = "127.0.0.1"
+
+# Port range for the servers that are exposed to the internet
+min-servers-port = 25560
+max-servers-port = 25570

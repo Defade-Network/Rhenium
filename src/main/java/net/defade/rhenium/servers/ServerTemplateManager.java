@@ -9,6 +9,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -44,6 +45,14 @@ public class ServerTemplateManager {
         try {
             Files.delete(ServerTemplate.SERVERS_CACHE);
         } catch (IOException ignored) { }
+    }
+
+    public Collection<ServerTemplate> getServerTemplates() {
+        return serverTemplates.values();
+    }
+
+    public ServerTemplate getServerTemplate(String templateId) {
+        return serverTemplates.get(templateId);
     }
 
     /**
@@ -104,8 +113,9 @@ public class ServerTemplateManager {
 
         String id = gridFSFile.getId().asString().getValue();
         String serverName = gridFSFile.getMetadata().getString("server-name");
+        int power = gridFSFile.getMetadata().getInteger("power");
         int maxPlayers = gridFSFile.getMetadata().getInteger("max-players");
 
-        return new ServerTemplate(id, serverName, maxPlayers);
+        return new ServerTemplate(id, serverName, power, maxPlayers);
     }
 }

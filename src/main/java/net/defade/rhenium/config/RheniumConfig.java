@@ -15,9 +15,16 @@ public class RheniumConfig {
     private String mongoConnectionString;
     private String mongoDatabase;
 
+    private int availablePower;
+    private String publicServerIp;
+    private int minServersPort;
+    private int maxServersPort;
+
     public RheniumConfig(CommentedFileConfig config) {
         loadRedisConfig(config.get("redis"));
         loadMongoConfig(config.get("mongodb"));
+
+        loadNetworkSettings(config.get("network-settings"));
     }
 
     private void loadRedisConfig(CommentedConfig config) {
@@ -30,6 +37,13 @@ public class RheniumConfig {
     private void loadMongoConfig(CommentedConfig mongodb) {
         mongoConnectionString = mongodb.get("connection-string");
         mongoDatabase = mongodb.get("database");
+    }
+
+    private void loadNetworkSettings(CommentedConfig networkSettings) {
+        availablePower = networkSettings.get("available-power");
+        publicServerIp = networkSettings.get("public-server-ip");
+        minServersPort = networkSettings.get("min-servers-port");
+        maxServersPort = networkSettings.get("max-servers-port");
     }
 
     public String getRedisHost() {
@@ -54,6 +68,22 @@ public class RheniumConfig {
 
     public String getMongoDatabase() {
         return mongoDatabase;
+    }
+
+    public int getAvailablePower() {
+        return availablePower;
+    }
+
+    public String getPublicServerIp() {
+        return publicServerIp;
+    }
+
+    public int getMinServersPort() {
+        return minServersPort;
+    }
+
+    public int getMaxServersPort() {
+        return maxServersPort;
     }
 
     public static RheniumConfig load() {

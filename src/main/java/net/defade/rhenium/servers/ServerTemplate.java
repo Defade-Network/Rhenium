@@ -12,6 +12,7 @@ public class ServerTemplate {
 
     private final String templateId;
     private final String serverName;
+    private final int power;
     private final int maxPlayers;
 
     private boolean isOutdated = false;
@@ -21,11 +22,13 @@ public class ServerTemplate {
      *                   This is used to check if the server template has been updated and to make sure that the Rhenium swarm all uses
      *                   the same server template when being requested to start a server.
      * @param serverName The name of the server template. This is used to identify the server template in the Rhenium swarm.
+     * @param power The power of the server template. The power represents the amount of resources that a game server will require.
      * @param maxPlayers The maximum amount of players that can join the server. Used to create/delete servers based on the demand.
      */
-    public ServerTemplate(String templateId, String serverName, int maxPlayers) {
+    public ServerTemplate(String templateId, String serverName, int power, int maxPlayers) {
         this.templateId = templateId;
         this.serverName = serverName;
+        this.power = power;
         this.maxPlayers = maxPlayers;
     }
 
@@ -42,7 +45,7 @@ public class ServerTemplate {
                 Files.createFile(serverPath);
 
                 // Download the server from the MongoDB GridFS
-                gridFSBucket.downloadToStream(new BsonString(serverName), Files.newOutputStream(serverPath));
+                gridFSBucket.downloadToStream(new BsonString(templateId), Files.newOutputStream(serverPath));
 
                 future.complete(null);
             } catch (Exception exception) {
@@ -59,6 +62,10 @@ public class ServerTemplate {
 
     public String getServerName() {
         return serverName;
+    }
+
+    public int getPower() {
+        return power;
     }
 
     public int getMaxPlayers() {
