@@ -5,12 +5,14 @@ import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
 import com.mongodb.client.MongoDatabase;
 import net.defade.rhenium.config.RheniumConfig;
+import net.defade.rhenium.servers.ServerTemplateManager;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.bson.BsonDocument;
 import org.bson.BsonInt64;
 import org.bson.conversions.Bson;
 import redis.clients.jedis.JedisPooled;
+import java.util.Timer;
 
 public class Rhenium {
     private static final Logger LOGGER = LogManager.getLogger(Rhenium.class);
@@ -20,6 +22,9 @@ public class Rhenium {
     private JedisPooled jedisPool;
     private MongoClient mongoClient;
     private MongoDatabase mongoDatabase;
+
+    private final Timer timer = new Timer();
+    private final ServerTemplateManager serverTemplateManager = new ServerTemplateManager(this);
 
     public Rhenium(RheniumConfig rheniumConfig) {
         this.rheniumConfig = rheniumConfig;
@@ -51,6 +56,8 @@ public class Rhenium {
         }
         LOGGER.info("Successfully connected to the MongoDB server.");
 
+        serverTemplateManager.start();
+
         LOGGER.info("Rhenium has been started.");
         Runtime.getRuntime().addShutdownHook(new Thread(this::stop));
     }
@@ -58,9 +65,24 @@ public class Rhenium {
     public void stop() {
         LOGGER.info("Shutting down Rhenium...");
 
+        timer.cancel();
+        serverTemplateManager.stop();
+
         jedisPool.close();
         mongoClient.close();
         LOGGER.info("Rhenium has shut down.");
+    }
+
+    public Timer getTimer() {
+        return timer;
+    }
+
+    public JedisPooled getJedisPool() {
+        return jedisPool;
+    }
+
+    public MongoDatabase getMongoDatabase() {
+        return mongoDatabase;
     }
 
     private boolean isMongoConnected() {
