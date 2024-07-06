@@ -1,0 +1,17 @@
+<Configuration status="warn">
+    <Appenders>
+        <!-- Console appender configuration -->
+        <Console name="console" target="SYSTEM_OUT">
+            <PatternLayout pattern="%highlight{[%d{dd/MM} %d{HH:mm:ss} %p] %msg%n%throwable}{FATAL=red, ERROR=red, WARN=yellow, INFO=default, DEBUG=blue, TRACE=green}"/>
+        </Console>
+    </Appenders>
+    <Loggers>
+        <!-- Root logger referring to console appender -->
+        <Root level="info" additivity="false">
+            <AppenderRef ref="console"/>
+        </Root>
+        <Logger name="org.mongodb.driver" level="off" additivity="false">
+            <AppenderRef ref="Out"/>
+        </Logger>
+    </Loggers>
+</Configuration>
