@@ -1,7 +1,12 @@
 package net.defade.rhenium;
 
+import net.defade.rhenium.config.RheniumConfig;
+
 public class Main {
     public static void main(String[] args) {
-        System.out.println("Hello world!");
+        RheniumConfig rheniumConfig = RheniumConfig.load();
+
+        Rhenium rhenium = new Rhenium(rheniumConfig);
+        rhenium.start();
     }
 }
