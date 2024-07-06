@@ -5,7 +5,9 @@ import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
 import com.mongodb.client.MongoDatabase;
 import net.defade.rhenium.config.RheniumConfig;
+import net.defade.rhenium.controller.LeaderTracker;
 import net.defade.rhenium.servers.ServerTemplateManager;
+import net.defade.rhenium.utils.Utils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.bson.BsonDocument;
@@ -23,8 +25,11 @@ public class Rhenium {
     private MongoClient mongoClient;
     private MongoDatabase mongoDatabase;
 
+    private String rheniumId;
+
     private final Timer timer = new Timer();
     private final ServerTemplateManager serverTemplateManager = new ServerTemplateManager(this);
+    private final LeaderTracker leaderTracker = new LeaderTracker(this);
 
     public Rhenium(RheniumConfig rheniumConfig) {
         this.rheniumConfig = rheniumConfig;
@@ -56,7 +61,10 @@ public class Rhenium {
         }
         LOGGER.info("Successfully connected to the MongoDB server.");
 
+        this.rheniumId = "rhenium-" + Utils.generateUniqueNetworkId(jedisPool, 6);
+
         serverTemplateManager.start();
+        leaderTracker.start();
 
         LOGGER.info("Rhenium has been started.");
         Runtime.getRuntime().addShutdownHook(new Thread(this::stop));
@@ -83,6 +91,10 @@ public class Rhenium {
 
     public MongoDatabase getMongoDatabase() {
         return mongoDatabase;
+    }
+
+    public String getRheniumId() {
+        return rheniumId;
     }
 
     private boolean isMongoConnected() {
