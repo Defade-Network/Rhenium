@@ -17,4 +17,5 @@ dependencies {
     implementation("com.electronwill.night-config:toml:3.6.7")
 
     implementation("redis.clients:jedis:5.1.2")
+    implementation("org.mongodb:mongo-java-driver:3.12.14")
 }

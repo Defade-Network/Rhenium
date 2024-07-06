@@ -3,3 +3,7 @@ host = "localhost"
 port = 6379
 user = "default"
 password = ""
+
+[mongodb]
+connection-string = "mongodb://localhost:27017"
+database = "defade"

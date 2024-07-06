@@ -12,8 +12,12 @@ public class RheniumConfig {
     private String redisUser;
     private String redisPassword;
 
+    private String mongoConnectionString;
+    private String mongoDatabase;
+
     public RheniumConfig(CommentedFileConfig config) {
         loadRedisConfig(config.get("redis"));
+        loadMongoConfig(config.get("mongodb"));
     }
 
     private void loadRedisConfig(CommentedConfig config) {
@@ -21,6 +25,11 @@ public class RheniumConfig {
         redisPort = config.get("port");
         redisUser = config.get("user");
         redisPassword = config.get("password");
+    }
+
+    private void loadMongoConfig(CommentedConfig mongodb) {
+        mongoConnectionString = mongodb.get("connection-string");
+        mongoDatabase = mongodb.get("database");
     }
 
     public String getRedisHost() {
@@ -37,6 +46,14 @@ public class RheniumConfig {
 
     public String getRedisPassword() {
         return redisPassword;
+    }
+
+    public String getMongoConnectionString() {
+        return mongoConnectionString;
+    }
+
+    public String getMongoDatabase() {
+        return mongoDatabase;
     }
 
     public static RheniumConfig load() {
