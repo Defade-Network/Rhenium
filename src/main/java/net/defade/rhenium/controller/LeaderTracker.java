@@ -45,6 +45,8 @@ public class LeaderTracker {
         if (rhenium.getRheniumId().equals(leaderId)) {
             if (!isLeader) LOGGER.info("This instance is now the leader of the swarm.");
             isLeader = true;
+
+            rhenium.getJedisPool().expire(RedisConstants.LEADER_ID, RedisConstants.RHENIUM_CLIENT_TIMEOUT); // Renew the leader key expiration
         } else {
             if (isLeader) LOGGER.info("This instance is no longer the leader of the swarm.");
             isLeader = false;
