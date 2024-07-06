@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TimerTask;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class ServerManager {
@@ -62,6 +63,14 @@ public class ServerManager {
                 }
             }
         }, 0, 2 * 1000);
+    }
+
+    public void stop() {
+        LOGGER.info("Stopping the servers...");
+
+        CompletableFuture.allOf(gameServers.values().stream()
+                .map(GameServer::stop)
+                .toArray(CompletableFuture[]::new)).join();
     }
 
     /**

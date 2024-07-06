@@ -78,6 +78,7 @@ public class Rhenium {
 
         timer.cancel();
         serverTemplateManager.stop();
+        serverManager.stop();
 
         jedisPool.close();
         mongoClient.close();

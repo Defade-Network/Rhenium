@@ -7,6 +7,7 @@ import net.defade.rhenium.utils.RedisConstants;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 public class GameServer {
     private static final Logger LOGGER = LogManager.getLogger(GameServer.class);
@@ -82,8 +83,16 @@ public class GameServer {
         return port;
     }
 
-    public void stop() {
-        process.destroy();
+    public CompletableFuture<Void> stop() {
+        process.destroyForcibly();
+        return CompletableFuture.runAsync(() -> {
+            try {
+                process.waitFor();
+            } catch (InterruptedException exception) {
+                LOGGER.error("Failed to stop the server {}.", serverId, exception);
+            }
+            cleanServer();
+        });
     }
 
     /**
