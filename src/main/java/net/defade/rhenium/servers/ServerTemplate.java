@@ -1,35 +1,45 @@
 package net.defade.rhenium.servers;
 
 import com.mongodb.client.gridfs.GridFSBucket;
+import com.mongodb.client.gridfs.model.GridFSFile;
 import org.bson.BsonString;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 
 public class ServerTemplate {
     public static final Path SERVERS_CACHE = Path.of(".servers");
 
-    private final String templateId;
-    private final String serverName;
+    private final String templateName;
     private final int power;
     private final int maxPlayers;
+    private final String fileMd5;
 
     private boolean isOutdated = false;
 
     /**
-     * @param templateId The unique id of the server template. When changing any property of the server template, the id should be changed.
-     *                   This is used to check if the server template has been updated and to make sure that the Rhenium swarm all uses
-     *                   the same server template when being requested to start a server.
-     * @param serverName The name of the server template. This is used to identify the server template in the Rhenium swarm.
+     * @param templateName The name of the server template. This is used to identify the server template in the Rhenium swarm.
      * @param power The power of the server template. The power represents the amount of resources that a game server will require.
      * @param maxPlayers The maximum amount of players that can join the server. Used to create/delete servers based on the demand.
      */
-    public ServerTemplate(String templateId, String serverName, int power, int maxPlayers) {
-        this.templateId = templateId;
-        this.serverName = serverName;
+    public ServerTemplate(String templateName, int power, int maxPlayers, String fileMd5) {
+        this.templateName = templateName;
         this.power = power;
         this.maxPlayers = maxPlayers;
+        this.fileMd5 = fileMd5;
+    }
+
+    public ServerTemplate(GridFSFile gridFSFile) {
+        if (gridFSFile.getMetadata() == null) {
+            throw new IllegalArgumentException("The server template " + gridFSFile.getId().asString().getValue() + " does not have any metadata.");
+        }
+
+        this.templateName = gridFSFile.getId().asString().getValue();
+        this.power = gridFSFile.getMetadata().getInteger("power");
+        this.maxPlayers = gridFSFile.getMetadata().getInteger("max-players");
+        this.fileMd5 = gridFSFile.getMetadata().getString("md5");
     }
 
     public CompletableFuture<Void> downloadServer(GridFSBucket gridFSBucket) {
@@ -40,12 +50,12 @@ public class ServerTemplate {
 
             try {
                 // Check if the server has already been downloaded
-                Path serverPath = SERVERS_CACHE.resolve(serverName);
+                Path serverPath = SERVERS_CACHE.resolve(getFileName());
                 Files.deleteIfExists(serverPath);
                 Files.createFile(serverPath);
 
                 // Download the server from the MongoDB GridFS
-                gridFSBucket.downloadToStream(new BsonString(templateId), Files.newOutputStream(serverPath));
+                gridFSBucket.downloadToStream(new BsonString(templateName), Files.newOutputStream(serverPath));
 
                 future.complete(null);
             } catch (Exception exception) {
@@ -56,12 +66,8 @@ public class ServerTemplate {
         return future;
     }
 
-    public String getTemplateId() {
-        return templateId;
-    }
-
-    public String getServerName() {
-        return serverName;
+    public String getTemplateName() {
+        return templateName;
     }
 
     public int getPower() {
@@ -70,6 +76,10 @@ public class ServerTemplate {
 
     public int getMaxPlayers() {
         return maxPlayers;
+    }
+
+    public String getFileName() {
+        return templateName + "-" + fileMd5; // We add the md5 so that we don't overwrite servers that are running since an outdated server template can still have servers
     }
 
     public void markOutdated() {
@@ -83,6 +93,12 @@ public class ServerTemplate {
         return isOutdated;
     }
 
+    public boolean isDifferentFromDB(GridFSFile gridFSFile) {
+        ServerTemplate serverTemplate = new ServerTemplate(gridFSFile);
+
+        return !serverTemplate.equals(this);
+    }
+
     private void createServerDirectory() {
         if (!Files.exists(SERVERS_CACHE)) {
             try {
@@ -91,5 +107,18 @@ public class ServerTemplate {
                 throw new IllegalStateException("Failed to create the servers cache directory.", exception);
             }
         }
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        ServerTemplate that = (ServerTemplate) o;
+        return power == that.power && maxPlayers == that.maxPlayers && isOutdated == that.isOutdated && Objects.equals(templateName, that.templateName) && Objects.equals(fileMd5, that.fileMd5);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(templateName, power, maxPlayers, fileMd5, isOutdated);
     }
 }

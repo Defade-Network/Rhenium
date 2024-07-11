@@ -122,7 +122,7 @@ public class GameServer {
                 "-Dredis.password=" + rheniumConfig.getRedisPassword(),
                 "-Dmongo.connection-string=" + rheniumConfig.getMongoConnectionString(),
                 "-jar",
-                ServerTemplate.SERVERS_CACHE.resolve(serverTemplate.getServerName()).toString()
+                ServerTemplate.SERVERS_CACHE.resolve(serverTemplate.getFileName()).toString()
         };
     }
 }
