@@ -90,6 +90,11 @@ public class RedisConstants {
     public static final String GAME_SERVER_CREATE_ACKNOWLEDGE_CHANNEL = "rhenium:game_server_create_acknowledge";
 
     /**
+     * Pub/Sub channel to notify that a server has been marked for stop.
+     */
+    public static final String GAME_SERVER_MARKED_FOR_STOP_CHANNEL = "rhenium:game_server_marked_for_stop";
+
+    /**
      * Pub/Sub channel to stop a server.
      */
     public static final String GAME_SERVER_STOP_CHANNEL = "rhenium:game_server_stop";

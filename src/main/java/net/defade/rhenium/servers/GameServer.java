@@ -83,8 +83,13 @@ public class GameServer {
         return port;
     }
 
-    public CompletableFuture<Void> stop() {
-        process.destroyForcibly();
+    public CompletableFuture<Void> stop(boolean force) {
+        if (!force) {
+            process.destroy();
+        } else {
+            process.destroyForcibly();
+        }
+
         return CompletableFuture.runAsync(() -> {
             try {
                 process.waitFor();
