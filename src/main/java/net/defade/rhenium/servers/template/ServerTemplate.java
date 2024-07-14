@@ -16,6 +16,7 @@ public class ServerTemplate {
     private final int power;
     private final int maxPlayers;
     private final String fileMd5;
+    private final String javaArgs;
 
     private boolean isOutdated = false;
 
@@ -23,12 +24,15 @@ public class ServerTemplate {
      * @param templateName The name of the server template. This is used to identify the server template in the Rhenium swarm.
      * @param power The power of the server template. The power represents the amount of resources that a game server will require.
      * @param maxPlayers The maximum amount of players that can join the server. Used to create/delete servers based on the demand.
+     * @param fileMd5 The MD5 hash of the server template file. Used to check if the server template has been updated.
+     * @param javaArgs The Java arguments that should be used to launch the server.
      */
-    public ServerTemplate(String templateName, int power, int maxPlayers, String fileMd5) {
+    public ServerTemplate(String templateName, int power, int maxPlayers, String fileMd5, String javaArgs) {
         this.templateName = templateName;
         this.power = power;
         this.maxPlayers = maxPlayers;
         this.fileMd5 = fileMd5;
+        this.javaArgs = javaArgs;
     }
 
     public ServerTemplate(GridFSFile gridFSFile) {
@@ -40,6 +44,7 @@ public class ServerTemplate {
         this.power = gridFSFile.getMetadata().getInteger("power");
         this.maxPlayers = gridFSFile.getMetadata().getInteger("max-players");
         this.fileMd5 = gridFSFile.getMetadata().getString("md5");
+        this.javaArgs = gridFSFile.getMetadata().getString("java-args");
     }
 
     public CompletableFuture<Void> downloadServer(GridFSBucket gridFSBucket) {
@@ -76,6 +81,10 @@ public class ServerTemplate {
 
     public int getMaxPlayers() {
         return maxPlayers;
+    }
+
+    public String getJavaArgs() {
+        return javaArgs;
     }
 
     public String getFileName() {

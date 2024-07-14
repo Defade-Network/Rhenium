@@ -6,6 +6,9 @@ import net.defade.rhenium.servers.template.ServerTemplate;
 import net.defade.rhenium.utils.RedisConstants;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
@@ -38,6 +41,7 @@ public class GameServer {
 
         Map<String, String> serverInfos = Map.of(
                 RedisConstants.GAME_SERVER_RHENIUM_INSTANCE, rhenium.getRheniumId(),
+                RedisConstants.GAME_SERVER_STARTED, "false",
                 RedisConstants.GAME_SERVER_POWER, String.valueOf(serverTemplate.getPower()),
                 RedisConstants.GAME_SERVER_PORT, String.valueOf(port),
                 RedisConstants.GAME_SERVER_PLAYERS_COUNT, "0",
@@ -126,18 +130,22 @@ public class GameServer {
         serverManager.unregisterServer(this);
     }
 
-    private String[] generateStartCommand(String instanceId, int port, RheniumConfig rheniumConfig) {
-        return new String[] {
-                "java",
-                "-Dserver-port=" + port,
-                "-Dserver-id=" + instanceId,
-                "-Dredis.host=" + rheniumConfig.getRedisHost(),
-                "-Dredis.port=" + rheniumConfig.getRedisPort(),
-                "-Dredis.username=" + rheniumConfig.getRedisUser(),
-                "-Dredis.password=" + rheniumConfig.getRedisPassword(),
-                "-Dmongo.connection-string=" + rheniumConfig.getMongoConnectionString(),
-                "-jar",
-                ServerTemplate.SERVERS_CACHE.resolve(serverTemplate.getFileName()).toString()
-        };
+    private List<String> generateStartCommand(String instanceId, int port, RheniumConfig rheniumConfig) {
+        String[] serverTemplateJavaArgs = serverTemplate.getJavaArgs().split(" ");
+        List<String> command = new ArrayList<>(serverTemplateJavaArgs.length + 10);
+
+        command.add("java");
+        command.addAll(Arrays.asList(serverTemplateJavaArgs));
+        command.add("-Dserver-port=" + port);
+        command.add("-Dserver-id=" + instanceId);
+        command.add("-Dredis.host=" + rheniumConfig.getRedisHost());
+        command.add("-Dredis.port=" + rheniumConfig.getRedisPort());
+        command.add("-Dredis.username=" + rheniumConfig.getRedisUser());
+        command.add("-Dredis.password=" + rheniumConfig.getRedisPassword());
+        command.add("-Dmongo.connection-string=" + rheniumConfig.getMongoConnectionString());
+        command.add("-jar");
+        command.add(ServerTemplate.SERVERS_CACHE.resolve(serverTemplate.getFileName()).toString());
+
+        return command;
     }
 }
