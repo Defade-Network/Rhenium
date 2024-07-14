@@ -2,7 +2,7 @@ package net.defade.rhenium.servers;
 
 import net.defade.rhenium.Rhenium;
 import net.defade.rhenium.config.RheniumConfig;
-import net.defade.rhenium.controller.ServerManager;
+import net.defade.rhenium.servers.template.ServerTemplate;
 import net.defade.rhenium.utils.RedisConstants;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;

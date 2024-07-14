@@ -1,11 +1,10 @@
-package net.defade.rhenium.controller;
+package net.defade.rhenium.servers;
 
 import net.defade.rhenium.Rhenium;
 import net.defade.rhenium.redis.RedisGameServer;
 import net.defade.rhenium.redis.RedisRheniumInstance;
-import net.defade.rhenium.servers.GameServer;
-import net.defade.rhenium.servers.ServerTemplate;
-import net.defade.rhenium.servers.ServerTemplateManager;
+import net.defade.rhenium.servers.template.ServerTemplate;
+import net.defade.rhenium.servers.template.ServerTemplateManager;
 import net.defade.rhenium.utils.RedisConstants;
 import net.defade.rhenium.utils.Utils;
 import org.apache.logging.log4j.LogManager;

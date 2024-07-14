@@ -1,4 +1,4 @@
-package net.defade.rhenium.servers;
+package net.defade.rhenium.servers.template;
 
 import com.mongodb.client.gridfs.GridFSBucket;
 import com.mongodb.client.gridfs.GridFSBuckets;
