@@ -50,6 +50,11 @@ public class RedisConstants {
     public static final String GAME_SERVER_RHENIUM_INSTANCE = "rhenium-instance";
 
     /**
+     * The key which holds whether a game server has started or not and is ready to accept players.
+     */
+    public static final String GAME_SERVER_STARTED = "started";
+
+    /**
      * The key which holds the power of a game server.
      */
     public static final String GAME_SERVER_POWER = "power";

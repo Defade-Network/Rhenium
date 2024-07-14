@@ -30,9 +30,6 @@ public class ServerManager {
     private final ServerTemplateManager serverTemplateManager;
 
     private final List<Integer> usedPorts = new ArrayList<>();
-
-    private final Map<String, Long> stopRequests = new ConcurrentHashMap<>();
-
     /*
     This map will store all the creation requests that will be made so that if they take a bit too long to be processed,
     we won't ask for a second server.
@@ -40,17 +37,22 @@ public class ServerManager {
 
     Only used when the instance is the leader.
      */
-    private final Map<String, List<ServerCreationRequest>> serverCreationRequests = new ConcurrentHashMap<>();
     private final Map<String, GameServer> gameServers = new ConcurrentHashMap<>();
+
+    // Values used when the instance is the leader
+    private final PlayerServerDispatcher playerServerDispatcher;
+    private final Map<String, List<ServerCreationRequest>> serverCreationRequests = new ConcurrentHashMap<>();
+    private final Map<String, Long> stopRequests = new ConcurrentHashMap<>();
 
     public ServerManager(Rhenium rhenium) {
         this.rhenium = rhenium;
         this.serverTemplateManager = rhenium.getServerTemplateManager();
+        this.playerServerDispatcher = new PlayerServerDispatcher(rhenium, this);
     }
 
     public void start() {
         listenForServerEvents();
-        listenForPlayerMoveRequests();
+        playerServerDispatcher.start();
 
         rhenium.getTimer().scheduleAtFixedRate(new TimerTask() {
             @Override
@@ -62,6 +64,7 @@ public class ServerManager {
                     checkNewNeededServers();
                     downscaleServers();
                     checkOrphanedServers();
+                    playerServerDispatcher.checkRequests();
                 }
             }
         }, 0, 2 * 1000);
@@ -81,6 +84,42 @@ public class ServerManager {
         CompletableFuture.allOf(gameServers.values().stream()
                 .map(gameServer -> gameServer.stop(true))
                 .toArray(CompletableFuture[]::new)).join(); // Wait for the servers to stop
+    }
+
+    public List<RedisRheniumInstance> getRheniumInstances() {
+        List<RedisRheniumInstance> rheniumInstances = new ArrayList<>();
+        for (String rheniumKey : rhenium.getJedisPool().keys(RedisConstants.RHENIUM_CLIENT_KEY.apply("*"))) {
+            rheniumInstances.add(new RedisRheniumInstance(rhenium.getJedisPool(), rheniumKey.substring(RedisConstants.RHENIUM_CLIENT_KEY.apply("").length())));
+        }
+
+        return rheniumInstances;
+    }
+
+    /**
+     * Get all the game servers registered in Redis for a specific server template.
+     * @param serverTemplate The server template to get the servers from
+     * @return A list of RedisGameServer
+     */
+    public List<RedisGameServer> getAllRedisGameServers(ServerTemplate serverTemplate) {
+        List<RedisGameServer> redisGameServers = new ArrayList<>();
+        for (String serverKey : rhenium.getJedisPool().keys(RedisConstants.GAME_SERVER_KEY.apply(serverTemplate.getTemplateName() + "*"))) {
+            redisGameServers.add(new RedisGameServer(rhenium.getJedisPool(), serverKey.substring(RedisConstants.GAME_SERVER_KEY.apply("").length())));
+        }
+
+        return redisGameServers;
+    }
+
+    /**
+     * Get all the game servers registered in Redis.
+     * @return A list of RedisGameServer
+     */
+    public List<RedisGameServer> getAllRedisGameServers() {
+        List<RedisGameServer> redisGameServers = new ArrayList<>();
+        for (String serverKey : rhenium.getJedisPool().keys(RedisConstants.GAME_SERVER_KEY.apply("*"))) {
+            redisGameServers.add(new RedisGameServer(rhenium.getJedisPool(), serverKey.substring(RedisConstants.GAME_SERVER_KEY.apply("").length())));
+        }
+
+        return redisGameServers;
     }
 
     /**
@@ -146,43 +185,6 @@ public class ServerManager {
                     }
                 }
             }, RedisConstants.GAME_SERVER_CREATE_CHANNEL, RedisConstants.GAME_SERVER_CREATE_ACKNOWLEDGE_CHANNEL, RedisConstants.GAME_SERVER_STOP_CHANNEL);
-        });
-    }
-
-    private void listenForPlayerMoveRequests() {
-        Thread.ofVirtual().start(() -> {
-            rhenium.getJedisPool().subscribe(new JedisPubSub() {
-                @Override
-                public void onMessage(String channel, String message) {
-                    if (!rhenium.isLeader()) return;
-
-                    String[] parts = message.split(",");
-                    String uuid = parts[0];
-                    String serverTemplateName = parts[1];
-                    ServerTemplate serverTemplate = serverTemplateManager.getServerTemplate(serverTemplateName);
-                    if (serverTemplate == null) {
-                        LOGGER.error("Failed to move a player to the server {}. The server template does not exist.", serverTemplateName);
-                        return;
-                    }
-
-                    // Find the server with the most players
-                    RedisGameServer targetServer = null;
-                    int highestPlayers = -1;
-
-                    for (RedisGameServer gameServers : getAllRedisGameServers(serverTemplate)) {
-                        if (gameServers.isScheduledForStop()) continue;
-
-                        if (gameServers.getPlayerCount() < gameServers.getMaxPlayers() && gameServers.getPlayerCount() > highestPlayers) {
-                            targetServer = gameServers;
-                            highestPlayers = gameServers.getPlayerCount();
-                        }
-                    }
-
-                    if (targetServer != null) {
-                        rhenium.getJedisPool().publish(RedisConstants.PLAYER_SEND_TO_SERVER_PROXY_CHANNEL, uuid + "," + targetServer.getServerId());
-                    }
-                }
-            }, RedisConstants.PLAYER_SEND_TO_SERVER_REQUEST_CHANNEL);
         });
     }
 
@@ -331,7 +333,7 @@ public class ServerManager {
      * Send a server creation request to a Rhenium instance with enough power to handle the server.
      * @param serverTemplate The server template to create the server from
      */
-    public void sendServerCreateRequest(ServerTemplate serverTemplate) {
+    private void sendServerCreateRequest(ServerTemplate serverTemplate) {
         // Find a rhenium instance that can handle the server
         RedisRheniumInstance selectedRheniumInstance = null;
         for (RedisRheniumInstance rheniumInstance : getRheniumInstances()) {
@@ -372,7 +374,7 @@ public class ServerManager {
      * @param serverTemplate The server template to create the server from
      * @param serverId The server id
      */
-    public void startServer(ServerTemplate serverTemplate, String serverId) {
+    private void startServer(ServerTemplate serverTemplate, String serverId) {
         int port = findUnusedPort();
         if (port == -1) {
             LOGGER.error("Failed to find an unused port for the server {}.", serverId);
@@ -394,7 +396,7 @@ public class ServerManager {
      * Warning: This method should only be called by GameServer.
      * @param gameServer The game server to unregister
      */
-    public void unregisterServer(GameServer gameServer) {
+    protected void unregisterServer(GameServer gameServer) {
         gameServers.remove(gameServer.getServerId());
         usedPorts.remove((Object) gameServer.getPort()); // Cast to Object to avoid calling the remove(int index) method
     }
@@ -418,42 +420,6 @@ public class ServerManager {
         }
 
         return -1;
-    }
-
-    public List<RedisRheniumInstance> getRheniumInstances() {
-        List<RedisRheniumInstance> rheniumInstances = new ArrayList<>();
-        for (String rheniumKey : rhenium.getJedisPool().keys(RedisConstants.RHENIUM_CLIENT_KEY.apply("*"))) {
-            rheniumInstances.add(new RedisRheniumInstance(rhenium.getJedisPool(), rheniumKey.substring(RedisConstants.RHENIUM_CLIENT_KEY.apply("").length())));
-        }
-
-        return rheniumInstances;
-    }
-
-    /**
-     * Get all the game servers registered in Redis for a specific server template.
-     * @param serverTemplate The server template to get the servers from
-     * @return A list of RedisGameServer
-     */
-    private List<RedisGameServer> getAllRedisGameServers(ServerTemplate serverTemplate) {
-        List<RedisGameServer> redisGameServers = new ArrayList<>();
-        for (String serverKey : rhenium.getJedisPool().keys(RedisConstants.GAME_SERVER_KEY.apply(serverTemplate.getTemplateName() + "*"))) {
-            redisGameServers.add(new RedisGameServer(rhenium.getJedisPool(), serverKey.substring(RedisConstants.GAME_SERVER_KEY.apply("").length())));
-        }
-
-        return redisGameServers;
-    }
-
-    /**
-     * Get all the game servers registered in Redis.
-     * @return A list of RedisGameServer
-     */
-    private List<RedisGameServer> getAllRedisGameServers() {
-        List<RedisGameServer> redisGameServers = new ArrayList<>();
-        for (String serverKey : rhenium.getJedisPool().keys(RedisConstants.GAME_SERVER_KEY.apply("*"))) {
-            redisGameServers.add(new RedisGameServer(rhenium.getJedisPool(), serverKey.substring(RedisConstants.GAME_SERVER_KEY.apply("").length())));
-        }
-
-        return redisGameServers;
     }
 
     private record ServerCreationRequest(String rheniumId, int power, String serverId) { }
