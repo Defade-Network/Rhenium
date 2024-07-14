@@ -154,6 +154,8 @@ public class ServerManager {
             rhenium.getJedisPool().subscribe(new JedisPubSub() {
                 @Override
                 public void onMessage(String channel, String message) {
+                    if (!rhenium.isLeader()) return;
+
                     String[] parts = message.split(",");
                     String uuid = parts[0];
                     String serverTemplateName = parts[1];
