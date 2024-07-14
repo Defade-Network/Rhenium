@@ -1,6 +1,8 @@
 package net.defade.rhenium.controller;
 
 import net.defade.rhenium.Rhenium;
+import net.defade.rhenium.redis.RedisGameServer;
+import net.defade.rhenium.redis.RedisRheniumInstance;
 import net.defade.rhenium.servers.GameServer;
 import net.defade.rhenium.servers.ServerTemplate;
 import net.defade.rhenium.servers.ServerTemplateManager;
@@ -9,13 +11,11 @@ import net.defade.rhenium.utils.Utils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import redis.clients.jedis.JedisPubSub;
-
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.TimerTask;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -30,7 +30,6 @@ public class ServerManager {
     private final Rhenium rhenium;
     private final ServerTemplateManager serverTemplateManager;
 
-    private String rheniumClientKey;
     private final List<Integer> usedPorts = new ArrayList<>();
 
     private final Map<String, Long> stopRequests = new ConcurrentHashMap<>();
@@ -51,7 +50,6 @@ public class ServerManager {
     }
 
     public void start() {
-        this.rheniumClientKey = RedisConstants.RHENIUM_CLIENT_KEY.apply(rhenium.getRheniumId());
         listenForServerEvents();
         listenForPlayerMoveRequests();
 
@@ -90,7 +88,7 @@ public class ServerManager {
      * Register the Rhenium server information in Redis.
      */
     private void updateServerInformation() {
-        String key = RedisConstants.RHENIUM_CLIENT_KEY.apply(rhenium.getRheniumId());
+        String rheniumClientKey = RedisConstants.RHENIUM_CLIENT_KEY.apply(rhenium.getRheniumId());
 
         if (!rhenium.getJedisPool().exists(rheniumClientKey)) {
             // The client is not registered in Redis
@@ -101,12 +99,12 @@ public class ServerManager {
                     RedisConstants.RHENIUM_USED_POWER, "0"
             );
 
-            rhenium.getJedisPool().hset(key, infos);
+            rhenium.getJedisPool().hset(rheniumClientKey, infos);
 
             if (!gameServers.isEmpty()) stop();
         }
 
-        rhenium.getJedisPool().pexpire(key, RedisConstants.RHENIUM_CLIENT_TIMEOUT); // Renew the client key expiration
+        rhenium.getJedisPool().pexpire(rheniumClientKey, RedisConstants.RHENIUM_CLIENT_TIMEOUT); // Renew the client key expiration
     }
 
     private void listenForServerEvents() {
@@ -159,26 +157,28 @@ public class ServerManager {
                 public void onMessage(String channel, String message) {
                     String[] parts = message.split(",");
                     String uuid = parts[0];
-                    String serverName = parts[1];
+                    String serverTemplateName = parts[1];
+                    ServerTemplate serverTemplate = serverTemplateManager.getServerTemplate(serverTemplateName);
+                    if (serverTemplate == null) {
+                        LOGGER.error("Failed to move a player to the server {}. The server template does not exist.", serverTemplateName);
+                        return;
+                    }
 
                     // Find the server with the most players
-                    String targetServer = null;
+                    RedisGameServer targetServer = null;
                     int highestPlayers = -1;
-                    for (String serverKeys : rhenium.getJedisPool().keys(RedisConstants.GAME_SERVER_KEY.apply(serverName + "-*"))) {
-                        boolean canJoin = rhenium.getJedisPool().hget(serverKeys, RedisConstants.GAME_SERVER_SCHEDULED_FOR_STOP).equals("false");
-                        if (!canJoin) continue;
 
-                        int playerCount = Integer.parseInt(rhenium.getJedisPool().hget(serverKeys, RedisConstants.GAME_SERVER_PLAYERS_COUNT));
-                        int maxPlayersCount = Integer.parseInt(rhenium.getJedisPool().hget(serverKeys, RedisConstants.GAME_SERVER_MAX_PLAYERS));
+                    for (RedisGameServer gameServers : getAllRedisGameServers(serverTemplate)) {
+                        if (gameServers.isScheduledForStop()) continue;
 
-                        if (playerCount < maxPlayersCount && playerCount > highestPlayers) {
-                            targetServer = serverKeys.substring(RedisConstants.GAME_SERVER_KEY.apply("").length());
-                            highestPlayers = playerCount;
+                        if (gameServers.getPlayerCount() < gameServers.getMaxPlayers() && gameServers.getPlayerCount() > highestPlayers) {
+                            targetServer = gameServers;
+                            highestPlayers = gameServers.getPlayerCount();
                         }
                     }
 
                     if (targetServer != null) {
-                        rhenium.getJedisPool().publish(RedisConstants.PLAYER_SEND_TO_SERVER_PROXY_CHANNEL, uuid + "," + targetServer);
+                        rhenium.getJedisPool().publish(RedisConstants.PLAYER_SEND_TO_SERVER_PROXY_CHANNEL, uuid + "," + targetServer.getServerId());
                     }
                 }
             }, RedisConstants.PLAYER_SEND_TO_SERVER_REQUEST_CHANNEL);
@@ -187,13 +187,10 @@ public class ServerManager {
 
     private void checkOutdatedServers() {
         for (GameServer gameServer : gameServers.values()) {
-            if (gameServer.getServerTemplate().isOutdated()) {
+            if (!gameServer.isOutdated() && gameServer.getServerTemplate().isOutdated()) {
                 // The server is outdated, we need to flag it for deletion
-                String serverKey = RedisConstants.GAME_SERVER_KEY.apply(gameServer.getServerId());
-                boolean isOutdated = rhenium.getJedisPool().hget(serverKey, RedisConstants.GAME_SERVER_OUTDATED).equals("true");
-                if (!isOutdated) {
-                    rhenium.getJedisPool().hset(serverKey, RedisConstants.GAME_SERVER_OUTDATED, "true");
-                }
+                gameServer.markOutdated();
+                rhenium.getJedisPool().hset(RedisConstants.GAME_SERVER_KEY.apply(gameServer.getServerId()), RedisConstants.GAME_SERVER_OUTDATED, "true");
             }
         }
     }
@@ -203,29 +200,22 @@ public class ServerManager {
      */
     private void checkNewNeededServers() {
         for (ServerTemplate serverTemplate : serverTemplateManager.getServerTemplates()) {
-            Set<String> serverKeys = rhenium.getJedisPool().keys(RedisConstants.GAME_SERVER_KEY.apply(serverTemplate.getTemplateName()) + "*");
+            List<RedisGameServer> gameServers = getAllRedisGameServers(serverTemplate);
 
             int availableServers = serverCreationRequests.getOrDefault(serverTemplate.getTemplateName(), List.of()).size();
-
-            for (String serverKey : serverKeys) {
-                if (rhenium.getJedisPool().hget(serverKey, RedisConstants.GAME_SERVER_SCHEDULED_FOR_STOP).equals("true")) {
-                    continue;
-                }
-
-                if (Integer.parseInt(rhenium.getJedisPool().hget(serverKey, RedisConstants.GAME_SERVER_PLAYERS_COUNT)) < serverTemplate.getMaxPlayers()) {
-                    availableServers++;
-                }
-            }
+            availableServers += (int) gameServers.stream()
+                    .filter(gameServer -> !gameServer.isScheduledForStop())
+                    .filter(gameServer -> gameServer.getPlayerCount() < gameServer.getMaxPlayers())
+                    .count();
 
             while (availableServers < MIN_SERVERS) {
                 // Before scheduling a server, try to check if a server that is scheduled for stopping can be started again
                 // This is to avoid having to start a new server if we can reuse an old one
 
                 boolean found = false;
-                for (String serverKey : serverKeys) {
-                    if (rhenium.getJedisPool().hget(serverKey, RedisConstants.GAME_SERVER_SCHEDULED_FOR_STOP).equals("true") &&
-                            rhenium.getJedisPool().hget(serverKey, RedisConstants.GAME_SERVER_OUTDATED).equals("false")) {
-                        rhenium.getJedisPool().hset(serverKey, RedisConstants.GAME_SERVER_SCHEDULED_FOR_STOP, "false");
+                for (RedisGameServer gameServer : gameServers) {
+                    if (gameServer.isScheduledForStop() && !gameServer.isOutdated()) {
+                        gameServer.setScheduledForStop(false);
                         availableServers++;
                         found = true;
                         break;
@@ -244,42 +234,35 @@ public class ServerManager {
      * This method will check if there are any servers that needs to be deleted, flagged for deletion or if their rhenium instance doesn't exist anymore.
      */
     private void checkOrphanedServers() {
-        Set<String> serverKeys = rhenium.getJedisPool().keys(RedisConstants.GAME_SERVER_KEY.apply("*"));
+        for (RedisGameServer gameServer : getAllRedisGameServers()) {
+            String serverId = gameServer.getServerId();
 
-        for (String serverKey : serverKeys) {
-            String serverId = serverKey.substring(RedisConstants.GAME_SERVER_KEY.apply("").length());
             if (stopRequests.containsKey(serverId)) {
                 if (System.currentTimeMillis() - stopRequests.get(serverId) > 20 * 1000) {
-                    // We give 20s for the servers to shut down, if they haven't by then,
-                    // we will forcefully delete them as they might just not exist anymore and still be registered in redis.
-                    rhenium.getJedisPool().del(serverKey);
-                    stopRequests.remove(serverId);
+                    stopServer(serverId);
                 }
 
                 continue;
             }
 
-            boolean scheduledForStop = rhenium.getJedisPool().hget(serverKey, RedisConstants.GAME_SERVER_SCHEDULED_FOR_STOP).equals("true");
-            if (scheduledForStop) {
+            if (gameServer.isScheduledForStop()) {
                 // If there are no players online, we can delete the server
-                if (Integer.parseInt(rhenium.getJedisPool().hget(serverKey, RedisConstants.GAME_SERVER_PLAYERS_COUNT)) == 0) {
-                    rhenium.getJedisPool().publish(RedisConstants.GAME_SERVER_STOP_CHANNEL, serverId);
-                    stopRequests.put(serverId, System.currentTimeMillis());
+                if (gameServer.getPlayerCount() == 0) {
+                    stopServer(gameServer.getServerId());
                     LOGGER.info("Stopping the server {}.", serverId);
                 }
                 continue;
             }
 
-            if (rhenium.getJedisPool().hget(serverKey, RedisConstants.GAME_SERVER_OUTDATED).equals("true")) {
-                rhenium.getJedisPool().hset(serverKey, RedisConstants.GAME_SERVER_SCHEDULED_FOR_STOP, "true");
-                rhenium.getJedisPool().publish(RedisConstants.GAME_SERVER_MARKED_FOR_STOP_CHANNEL, serverKey.substring(RedisConstants.GAME_SERVER_KEY.apply("").length()));
+            if (gameServer.isOutdated()) {
+                gameServer.setScheduledForStop(true);
                 continue;
             }
 
-            String rheniumInstance = rhenium.getJedisPool().hget(serverKey, RedisConstants.GAME_SERVER_RHENIUM_INSTANCE);
-            if (!rhenium.getJedisPool().exists(RedisConstants.RHENIUM_CLIENT_KEY.apply(rheniumInstance))) {
+            String rheniumInstance = gameServer.getRheniumInstance();
+            if (!stopRequests.containsKey(serverId) && !rhenium.getJedisPool().exists(RedisConstants.RHENIUM_CLIENT_KEY.apply(rheniumInstance))) {
                 rhenium.getJedisPool().publish(RedisConstants.GAME_SERVER_STOP_CHANNEL, serverId);
-                rhenium.getJedisPool().del(serverKey); // Since the rhenium instance is dead, the key won't be cleaned by it
+                rhenium.getJedisPool().del(RedisConstants.GAME_SERVER_KEY.apply(serverId)); // Since the rhenium instance is dead, the key won't be cleaned by it
                 LOGGER.info("Found an orphan server: {}", serverId);
             }
         }
@@ -300,17 +283,17 @@ public class ServerManager {
      */
     private void downscaleServers() {
         for (ServerTemplate serverTemplate : serverTemplateManager.getServerTemplates()) {
-            Set<String> serverKeys = rhenium.getJedisPool().keys(RedisConstants.GAME_SERVER_KEY.apply(serverTemplate.getTemplateName()) + "*");
+            List<RedisGameServer> gameServers = getAllRedisGameServers(serverTemplate);
 
             int runningServers = 0;
             int connectedPlayers = 0;
-            for (String serverKey : serverKeys) {
-                if (rhenium.getJedisPool().hget(serverKey, RedisConstants.GAME_SERVER_SCHEDULED_FOR_STOP).equals("true")) {
+            for (RedisGameServer gameServer : gameServers) {
+                if (gameServer.isScheduledForStop()) {
                     continue;
                 }
 
                 runningServers++;
-                connectedPlayers += Integer.parseInt(rhenium.getJedisPool().hget(serverKey, RedisConstants.GAME_SERVER_PLAYERS_COUNT));
+                connectedPlayers += gameServer.getPlayerCount();
             }
 
             int serversNeeded = (int) Math.ceil((double) connectedPlayers / serverTemplate.getMaxPlayers()) + MIN_SERVERS;
@@ -320,25 +303,23 @@ public class ServerManager {
 
                 // Find the servers with the least amount of players and flag them for deletion
                 while (serversToRemove > 0) {
-                    String serverKeyToRemove = null;
+                    RedisGameServer serverToRemove = null;
                     int minPlayers = Integer.MAX_VALUE;
-                    for (String serverKey : serverKeys) {
-                        if (rhenium.getJedisPool().hget(serverKey, RedisConstants.GAME_SERVER_SCHEDULED_FOR_STOP).equals("true")) {
+                    for (RedisGameServer gameServer : gameServers) {
+                        if (gameServer.isScheduledForStop()) {
                             continue;
                         }
 
-                        int players = Integer.parseInt(rhenium.getJedisPool().hget(serverKey, RedisConstants.GAME_SERVER_PLAYERS_COUNT));
-                        if (players < minPlayers) {
-                            minPlayers = players;
-                            serverKeyToRemove = serverKey;
+                        if (gameServer.getPlayerCount() < minPlayers) {
+                            minPlayers = gameServer.getPlayerCount();
+                            serverToRemove = gameServer;
                         }
                     }
 
-                    if (serverKeyToRemove != null) {
-                        rhenium.getJedisPool().hset(serverKeyToRemove, RedisConstants.GAME_SERVER_SCHEDULED_FOR_STOP, "true");
-                        rhenium.getJedisPool().publish(RedisConstants.GAME_SERVER_MARKED_FOR_STOP_CHANNEL, serverKeyToRemove.substring(RedisConstants.GAME_SERVER_KEY.apply("").length()));
+                    if (serverToRemove != null) {
+                        serverToRemove.setScheduledForStop(true);
                         serversToRemove--;
-                        LOGGER.info("Too many servers running! Flagged the server {} for deletion.", serverKeyToRemove.substring(RedisConstants.GAME_SERVER_KEY.apply("").length()));
+                        LOGGER.info("Too many servers running! Flagged the server {} for deletion.", serverToRemove.getServerId());
                     }
                 }
             }
@@ -351,24 +332,20 @@ public class ServerManager {
      */
     public void sendServerCreateRequest(ServerTemplate serverTemplate) {
         // Find a rhenium instance that can handle the server
-        String rheniumInstance = null;
-        Set<String> rheniumInstances = rhenium.getJedisPool().keys(RedisConstants.RHENIUM_CLIENT_KEY.apply("*"));
-        for (String instance : rheniumInstances) {
-            String instanceId = instance.substring(RedisConstants.RHENIUM_CLIENT_KEY.apply("").length());
-
-            int availablePower = Integer.parseInt(rhenium.getJedisPool().hget(instance, RedisConstants.RHENIUM_AVAILABLE_POWER));
-            int usedPower = Integer.parseInt(rhenium.getJedisPool().hget(instance, RedisConstants.RHENIUM_USED_POWER));
+        RedisRheniumInstance selectedRheniumInstance = null;
+        for (RedisRheniumInstance rheniumInstance : getRheniumInstances()) {
+            int usedPower = rheniumInstance.getUsedPower();
             usedPower += serverCreationRequests.getOrDefault(serverTemplate.getTemplateName(), List.of()).stream()
-                    .filter(serverCreationRequest -> serverCreationRequest.rheniumId.equals(instanceId))
+                    .filter(serverCreationRequest -> serverCreationRequest.rheniumId.equals(rheniumInstance.getRheniumId()))
                     .mapToInt(ServerCreationRequest::power).sum();
 
-            if (availablePower - usedPower >= serverTemplate.getPower()) {
-                rheniumInstance = instanceId;
+            if (rheniumInstance.getAvailablePower() - usedPower >= serverTemplate.getPower()) {
+                selectedRheniumInstance = rheniumInstance;
                 break;
             }
         }
 
-        if (rheniumInstance == null) {
+        if (selectedRheniumInstance == null) {
             LOGGER.error("Failed to find a Rhenium instance that can handle the server {}.", serverTemplate.getTemplateName());
             return;
         }
@@ -378,10 +355,15 @@ public class ServerManager {
             serverCreationRequests.put(serverTemplate.getTemplateName(), new ArrayList<>());
         }
 
-        serverCreationRequests.get(serverTemplate.getTemplateName()).add(new ServerCreationRequest(rheniumInstance, serverTemplate.getPower(), serverId));
-        rhenium.getJedisPool().publish(RedisConstants.GAME_SERVER_CREATE_CHANNEL, serverTemplate.getTemplateName() + "," + rheniumInstance + "," + serverId);
+        serverCreationRequests.get(serverTemplate.getTemplateName()).add(new ServerCreationRequest(selectedRheniumInstance.getRheniumId(), serverTemplate.getPower(), serverId));
+        rhenium.getJedisPool().publish(RedisConstants.GAME_SERVER_CREATE_CHANNEL, serverTemplate.getTemplateName() + "," + selectedRheniumInstance.getRheniumId() + "," + serverId);
 
-        LOGGER.info("Sent a server creation request for the server {} to the Rhenium instance {}.", serverId, rheniumInstance);
+        LOGGER.info("Sent a server creation request for the server {} to the Rhenium instance {}.", serverId, selectedRheniumInstance.getRheniumId());
+    }
+
+    private void stopServer(String serverId) {
+        rhenium.getJedisPool().publish(RedisConstants.GAME_SERVER_STOP_CHANNEL, serverId);
+        stopRequests.put(serverId, System.currentTimeMillis());
     }
 
     /**
@@ -402,7 +384,7 @@ public class ServerManager {
         LOGGER.info("Started the server {} on port {}.", serverId, port);
         rhenium.getJedisPool().publish(RedisConstants.GAME_SERVER_CREATE_ACKNOWLEDGE_CHANNEL, serverTemplate.getTemplateName() + "," + serverId);
 
-        gameServers.put(serverId, gameServer); // TODO delete
+        gameServers.put(serverId, gameServer);
     }
 
     /**
@@ -435,6 +417,42 @@ public class ServerManager {
         }
 
         return -1;
+    }
+
+    public List<RedisRheniumInstance> getRheniumInstances() {
+        List<RedisRheniumInstance> rheniumInstances = new ArrayList<>();
+        for (String rheniumKey : rhenium.getJedisPool().keys(RedisConstants.RHENIUM_CLIENT_KEY.apply("*"))) {
+            rheniumInstances.add(new RedisRheniumInstance(rhenium.getJedisPool(), rheniumKey.substring(RedisConstants.RHENIUM_CLIENT_KEY.apply("").length())));
+        }
+
+        return rheniumInstances;
+    }
+
+    /**
+     * Get all the game servers registered in Redis for a specific server template.
+     * @param serverTemplate The server template to get the servers from
+     * @return A list of RedisGameServer
+     */
+    private List<RedisGameServer> getAllRedisGameServers(ServerTemplate serverTemplate) {
+        List<RedisGameServer> redisGameServers = new ArrayList<>();
+        for (String serverKey : rhenium.getJedisPool().keys(RedisConstants.GAME_SERVER_KEY.apply(serverTemplate.getTemplateName() + "*"))) {
+            redisGameServers.add(new RedisGameServer(rhenium.getJedisPool(), serverKey.substring(RedisConstants.GAME_SERVER_KEY.apply("").length())));
+        }
+
+        return redisGameServers;
+    }
+
+    /**
+     * Get all the game servers registered in Redis.
+     * @return A list of RedisGameServer
+     */
+    private List<RedisGameServer> getAllRedisGameServers() {
+        List<RedisGameServer> redisGameServers = new ArrayList<>();
+        for (String serverKey : rhenium.getJedisPool().keys(RedisConstants.GAME_SERVER_KEY.apply("*"))) {
+            redisGameServers.add(new RedisGameServer(rhenium.getJedisPool(), serverKey.substring(RedisConstants.GAME_SERVER_KEY.apply("").length())));
+        }
+
+        return redisGameServers;
     }
 
     private record ServerCreationRequest(String rheniumId, int power, String serverId) { }

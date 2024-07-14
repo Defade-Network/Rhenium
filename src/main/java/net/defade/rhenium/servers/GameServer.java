@@ -18,6 +18,8 @@ public class GameServer {
     private final ServerTemplate serverTemplate;
     private final int port;
 
+    private boolean isOutdated = false;
+
     private Process process;
 
     public GameServer(Rhenium rhenium, ServerManager serverManager, ServerTemplate serverTemplate, String serverId, int port) {
@@ -81,6 +83,14 @@ public class GameServer {
 
     public int getPort() {
         return port;
+    }
+
+    public boolean isOutdated() {
+        return isOutdated;
+    }
+
+    public void markOutdated() {
+        isOutdated = true;
     }
 
     public CompletableFuture<Void> stop(boolean force) {
