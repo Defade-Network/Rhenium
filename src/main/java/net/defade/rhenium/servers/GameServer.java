@@ -30,6 +30,7 @@ public class GameServer {
     private boolean isOutdated = false;
 
     private Process process;
+    private final CompletableFuture<Void> stopFuture = new CompletableFuture<>();
 
     public GameServer(Rhenium rhenium, ServerManager serverManager, ServerTemplate serverTemplate, String serverId, int port) {
         this.rhenium = rhenium;
@@ -72,12 +73,13 @@ public class GameServer {
             Thread.ofVirtual().start(() -> {
                 try {
                     process.waitFor();
-                    cleanServer();
                 } catch (InterruptedException exception) {
                     // Something bad happened, we need to clean up the server
                     process.destroy();
-                    cleanServer();
                 }
+
+                cleanServer();
+                stopFuture.complete(null);
             });
         } catch (Exception exception) {
             LOGGER.error("Failed to launch the server {}.", serverId, exception);
@@ -112,14 +114,7 @@ public class GameServer {
             process.destroyForcibly();
         }
 
-        return CompletableFuture.runAsync(() -> {
-            try {
-                process.waitFor();
-            } catch (InterruptedException exception) {
-                LOGGER.error("Failed to stop the server {}.", serverId, exception);
-            }
-            cleanServer();
-        });
+        return stopFuture;
     }
 
     /**
@@ -172,7 +167,6 @@ public class GameServer {
     }
 
     private void compressLogFile() {
-        System.out.println("deleting " + serverId);
         Path logFile = LOGS_FOLDER.resolve(serverId + ".log");
         Path compressedLogFile = LOGS_FOLDER.resolve(serverId + ".log.gz");
 
