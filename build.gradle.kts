@@ -1,5 +1,6 @@
 plugins {
     id("java")
+    id("com.github.johnrengelman.shadow") version "8.1.1"
 }
 
 group = "net.defade"
@@ -18,4 +19,10 @@ dependencies {
 
     implementation("redis.clients:jedis:5.1.2")
     implementation("org.mongodb:mongo-java-driver:3.12.14")
+}
+
+tasks.jar {
+    manifest {
+        attributes("Main-Class" to "net.defade.rhenium.Main")
+    }
 }

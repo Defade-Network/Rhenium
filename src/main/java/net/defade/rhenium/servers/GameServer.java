@@ -6,14 +6,20 @@ import net.defade.rhenium.servers.template.ServerTemplate;
 import net.defade.rhenium.utils.RedisConstants;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.zip.GZIPOutputStream;
 
 public class GameServer {
     private static final Logger LOGGER = LogManager.getLogger(GameServer.class);
+    private static final Path LOGS_FOLDER = Path.of("logs");
 
     private final Rhenium rhenium;
     private final String serverId;
@@ -59,6 +65,8 @@ public class GameServer {
         );
 
         ProcessBuilder processBuilder = new ProcessBuilder(generateStartCommand(serverId, port, rhenium.getRheniumConfig()));
+        redirectProcessLogs(processBuilder);
+
         try {
             process = processBuilder.start();
             Thread.ofVirtual().start(() -> {
@@ -126,8 +134,9 @@ public class GameServer {
         );
 
         rhenium.getJedisPool().del(RedisConstants.GAME_SERVER_KEY.apply(serverId));
-
         serverManager.unregisterServer(this);
+
+        compressLogFile();
     }
 
     private List<String> generateStartCommand(String instanceId, int port, RheniumConfig rheniumConfig) {
@@ -147,5 +156,38 @@ public class GameServer {
         command.add(ServerTemplate.SERVERS_CACHE.resolve(serverTemplate.getFileName()).toString());
 
         return command;
+    }
+
+    private void redirectProcessLogs(ProcessBuilder processBuilder) {
+        try {
+            if(!Files.exists(LOGS_FOLDER) || !Files.isDirectory(LOGS_FOLDER)) Files.createDirectory(LOGS_FOLDER);
+        } catch (IOException exception) {
+            LOGGER.error("Failed to create the logs folder.", exception);
+            return;
+        }
+
+        Path logFile = LOGS_FOLDER.resolve(serverId + ".log");
+        processBuilder.redirectErrorStream(true);
+        processBuilder.redirectOutput(ProcessBuilder.Redirect.to(logFile.toFile()));
+    }
+
+    private void compressLogFile() {
+        System.out.println("deleting " + serverId);
+        Path logFile = LOGS_FOLDER.resolve(serverId + ".log");
+        Path compressedLogFile = LOGS_FOLDER.resolve(serverId + ".log.gz");
+
+        // Compress the log file using GZIP
+        try (GZIPOutputStream gzipOutputStream = new GZIPOutputStream(Files.newOutputStream(compressedLogFile))) {
+            Files.copy(logFile, gzipOutputStream);
+        } catch (IOException exception) {
+            LOGGER.error("Failed to compress the log file.", exception);
+        }
+
+        // Delete the original log file
+        try {
+            Files.delete(logFile);
+        } catch (IOException exception) {
+            LOGGER.error("Failed to delete the log file.", exception);
+        }
     }
 }

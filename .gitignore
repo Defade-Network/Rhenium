@@ -40,3 +40,4 @@ bin/
 
 config.toml
 .servers
+logs
