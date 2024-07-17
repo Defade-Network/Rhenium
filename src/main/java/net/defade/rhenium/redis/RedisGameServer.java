@@ -13,7 +13,6 @@ public class RedisGameServer {
 
     private final String serverId;
     private final String rheniumInstance;
-    private final boolean started;
     private final int port;
     private boolean isScheduledForStop;
     private final boolean isOutdated;
@@ -27,7 +26,6 @@ public class RedisGameServer {
 
         Map<String, String> serverInfos = jedis.hgetAll(RedisConstants.GAME_SERVER_KEY.apply(serverId));
         this.rheniumInstance = serverInfos.get(RedisConstants.GAME_SERVER_RHENIUM_INSTANCE_ID);
-        this.started = Boolean.parseBoolean(serverInfos.get(RedisConstants.GAME_SERVER_STARTED));
         this.port = Integer.parseInt(serverInfos.get(RedisConstants.GAME_SERVER_PORT));
         this.isScheduledForStop = Boolean.parseBoolean(serverInfos.get(RedisConstants.GAME_SERVER_SCHEDULED_FOR_STOP));
         this.isOutdated = Boolean.parseBoolean(serverInfos.get(RedisConstants.GAME_SERVER_OUTDATED));
@@ -42,10 +40,6 @@ public class RedisGameServer {
 
     public String getRheniumInstance() {
         return rheniumInstance;
-    }
-
-    public boolean hasStarted() {
-        return started;
     }
 
     public int getPort() {

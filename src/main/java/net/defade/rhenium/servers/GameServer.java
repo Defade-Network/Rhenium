@@ -48,7 +48,6 @@ public class GameServer {
 
         Map<String, String> serverInfos = Map.of(
                 RedisConstants.GAME_SERVER_RHENIUM_INSTANCE_ID, rhenium.getRheniumId(),
-                RedisConstants.GAME_SERVER_STARTED, "false",
                 RedisConstants.GAME_SERVER_POWER, String.valueOf(serverTemplate.getPower()),
                 RedisConstants.GAME_SERVER_PORT, String.valueOf(port),
                 RedisConstants.GAME_SERVER_PLAYER_COUNT, "0",
@@ -129,6 +128,7 @@ public class GameServer {
         );
 
         rhenium.getJedisPool().del(RedisConstants.GAME_SERVER_KEY.apply(serverId));
+        rhenium.getJedisPool().del(RedisConstants.MINI_GAME_INSTANCE_KEY.apply(serverId, "*"));
         serverManager.unregisterServer(this);
 
         compressLogFile();

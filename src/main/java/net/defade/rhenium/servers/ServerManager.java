@@ -2,6 +2,7 @@ package net.defade.rhenium.servers;
 
 import net.defade.rhenium.Rhenium;
 import net.defade.rhenium.redis.RedisGameServer;
+import net.defade.rhenium.redis.RedisMiniGameInstance;
 import net.defade.rhenium.redis.RedisRheniumInstance;
 import net.defade.rhenium.servers.template.ServerTemplate;
 import net.defade.rhenium.servers.template.ServerTemplateManager;
@@ -16,6 +17,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.TimerTask;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
@@ -96,6 +98,15 @@ public class ServerManager {
     }
 
     /**
+     * Get a RedisGameServer from a server id.
+     * @param serverId The server id
+     * @return The RedisGameServer
+     */
+    public RedisGameServer getRedisGameServer(String serverId) {
+        return new RedisGameServer(rhenium.getJedisPool(), serverId);
+    }
+
+    /**
      * Get all the game servers registered in Redis for a specific server template.
      * @param serverTemplate The server template to get the servers from
      * @return A list of RedisGameServer
@@ -103,7 +114,7 @@ public class ServerManager {
     public List<RedisGameServer> getAllRedisGameServers(ServerTemplate serverTemplate) {
         List<RedisGameServer> redisGameServers = new ArrayList<>();
         for (String serverKey : rhenium.getJedisPool().keys(RedisConstants.GAME_SERVER_KEY.apply(serverTemplate.getTemplateName() + "*"))) {
-            redisGameServers.add(new RedisGameServer(rhenium.getJedisPool(), serverKey.substring(RedisConstants.GAME_SERVER_KEY.apply("").length())));
+            redisGameServers.add(getRedisGameServer(serverKey.substring(RedisConstants.GAME_SERVER_KEY.apply("").length())));
         }
 
         return redisGameServers;
@@ -116,10 +127,26 @@ public class ServerManager {
     public List<RedisGameServer> getAllRedisGameServers() {
         List<RedisGameServer> redisGameServers = new ArrayList<>();
         for (String serverKey : rhenium.getJedisPool().keys(RedisConstants.GAME_SERVER_KEY.apply("*"))) {
-            redisGameServers.add(new RedisGameServer(rhenium.getJedisPool(), serverKey.substring(RedisConstants.GAME_SERVER_KEY.apply("").length())));
+            redisGameServers.add(getRedisGameServer(serverKey.substring(RedisConstants.GAME_SERVER_KEY.apply("").length())));
         }
 
         return redisGameServers;
+    }
+
+    /**
+     * Get all the mini-game instances registered in Redis for a specific server template.
+     * @param serverTemplate The server template to get the servers from
+     * @return A list of RedisMiniGameInstance
+     */
+    public List<RedisMiniGameInstance> getAllRedisMiniGameInstances(ServerTemplate serverTemplate) {
+        List<RedisMiniGameInstance> redisMiniGameInstances = new ArrayList<>();
+        for (String miniGameInstancesKey : rhenium.getJedisPool().keys(RedisConstants.MINI_GAME_INSTANCE_KEY.apply(serverTemplate.getTemplateName() + "*", null))) {
+            String serverId = miniGameInstancesKey.split(":")[2];
+            UUID miniGameInstanceId = UUID.fromString(miniGameInstancesKey.split(":")[3]);
+            redisMiniGameInstances.add(new RedisMiniGameInstance(rhenium.getJedisPool(), serverId, miniGameInstanceId));
+        }
+
+        return redisMiniGameInstances;
     }
 
     /**
@@ -266,6 +293,7 @@ public class ServerManager {
             if (!stopRequests.containsKey(serverId) && !rhenium.getJedisPool().exists(RedisConstants.RHENIUM_CLIENT_KEY.apply(rheniumInstance))) {
                 rhenium.getJedisPool().publish(RedisConstants.CHANNEL_GAME_SERVER_STOP, serverId);
                 rhenium.getJedisPool().del(RedisConstants.GAME_SERVER_KEY.apply(serverId)); // Since the rhenium instance is dead, the key won't be cleaned by it
+                rhenium.getJedisPool().del(RedisConstants.MINI_GAME_INSTANCE_KEY.apply(serverId, "*"));
                 LOGGER.info("Found an orphan server: {}", serverId);
             }
         }

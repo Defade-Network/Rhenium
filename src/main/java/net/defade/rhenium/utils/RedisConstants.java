@@ -1,5 +1,6 @@
 package net.defade.rhenium.utils;
 
+import java.util.function.BiFunction;
 import java.util.function.Function;
 
 public class RedisConstants {
@@ -67,11 +68,6 @@ public class RedisConstants {
     public static final String GAME_SERVER_RHENIUM_INSTANCE_ID = "rhenium-instance";
 
     /**
-     * The key which holds whether a game server has started or not and is ready to accept players.
-     */
-    public static final String GAME_SERVER_STARTED = "started";
-
-    /**
      * The key which holds the power of a game server.
      */
     public static final String GAME_SERVER_POWER = "power";
@@ -100,6 +96,34 @@ public class RedisConstants {
      * The key which holds whether a game server is outdated or not.
      */
     public static final String GAME_SERVER_OUTDATED = "outdated";
+
+    // ==========================================================
+    //                Mini Game Instances Management
+    // ==========================================================
+
+    /**
+     * Provides the key to store a mini-game instance information. The serverId is the unique identifier of the server
+     * and the miniGameInstanceUUID is the unique identifier of the mini-game instance.
+     */
+    public static BiFunction<String, String, String> MINI_GAME_INSTANCE_KEY =
+            (serverId, miniGameInstanceUUID) -> "rhenium:mini-game-instance:" + serverId
+                    + (miniGameInstanceUUID == null ? "" : ":" + miniGameInstanceUUID);
+
+    /**
+     * The key which holds the amount of players in a mini-game instance.
+     */
+    public static String MINI_GAME_INSTANCE_PLAYER_COUNT = "player-count";
+
+    /**
+     * The key which holds the maximum amount of players in a mini-game instance.
+     */
+    public static String MINI_GAME_INSTANCE_MAX_PLAYERS = "max-players";
+
+    /**
+     * The key which holds whether a mini-game instance is accepting players or not.
+     */
+    public static String MINI_GAME_INSTANCE_ACCEPTING_PLAYERS = "accept-players";
+
 
     // ==========================================================
     //        Pub/Sub Channels for Game Server Management

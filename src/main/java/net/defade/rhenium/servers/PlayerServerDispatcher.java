@@ -2,6 +2,7 @@ package net.defade.rhenium.servers;
 
 import net.defade.rhenium.Rhenium;
 import net.defade.rhenium.redis.RedisGameServer;
+import net.defade.rhenium.redis.RedisMiniGameInstance;
 import net.defade.rhenium.servers.template.ServerTemplate;
 import net.defade.rhenium.servers.template.ServerTemplateManager;
 import net.defade.rhenium.utils.RedisConstants;
@@ -39,12 +40,13 @@ public class PlayerServerDispatcher {
                     String serverTemplateName = parts[1];
 
                     ServerTemplate serverTemplate = serverTemplateManager.getServerTemplate(serverTemplateName);
-                    RedisGameServer targetServer = findBestServer(serverTemplate);
+                    RedisMiniGameInstance targetMiniGameInstance = findBestMiniGameInstance(serverTemplate);
 
-                    if (targetServer == null) {
+                    if (targetMiniGameInstance == null) {
                         playerServerRequests.put(uuid, new ServerMoveRequest(serverTemplateName, System.currentTimeMillis())); // Store the request for later retry
                     } else {
-                        rhenium.getJedisPool().publish(RedisConstants.CHANNEL_PLAYER_MOVE_PROXY, uuid + "," + targetServer.getServerId());
+                        rhenium.getJedisPool().publish(RedisConstants.CHANNEL_PLAYER_MOVE_PROXY,
+                                uuid + "," + targetMiniGameInstance.getServerId() + "," + targetMiniGameInstance.getMiniGameInstanceId().toString());
                     }
                 }
             }, RedisConstants.CHANNEL_PLAYER_MOVE_REQUEST);
@@ -62,32 +64,36 @@ public class PlayerServerDispatcher {
             }
 
             ServerTemplate serverTemplate = serverTemplateManager.getServerTemplate(request.serverTemplateName);
-            RedisGameServer targetServer = findBestServer(serverTemplate);
-            if (targetServer == null) {
+            RedisMiniGameInstance targetMiniGameInstance = findBestMiniGameInstance(serverTemplate);
+            if (targetMiniGameInstance == null) {
                 return false;
             }
 
-            rhenium.getJedisPool().publish(RedisConstants.CHANNEL_PLAYER_MOVE_PROXY, uuid + "," + targetServer.getServerId());
+            rhenium.getJedisPool().publish(RedisConstants.CHANNEL_PLAYER_MOVE_PROXY,
+                    uuid + "," + targetMiniGameInstance.getServerId() + "," + targetMiniGameInstance.getMiniGameInstanceId().toString());
             return true;
         });
     }
 
-    private RedisGameServer findBestServer(ServerTemplate serverTemplate) {
+    private RedisMiniGameInstance findBestMiniGameInstance(ServerTemplate serverTemplate) {
         if (serverTemplate == null) return null;
 
-        RedisGameServer bestServer = null;
+        RedisMiniGameInstance bestMiniGameInstance = null;
         int highestPlayers = -1;
 
-        for (RedisGameServer gameServer : serverManager.getAllRedisGameServers(serverTemplate)) {
-            if (gameServer.isScheduledForStop() || !gameServer.hasStarted()) continue;
+        for (RedisMiniGameInstance miniGameInstances : serverManager.getAllRedisMiniGameInstances(serverTemplate)) {
+            if (!miniGameInstances.isAcceptingPlayers()) continue;
 
-            if (gameServer.getPlayerCount() < gameServer.getMaxPlayers() && gameServer.getPlayerCount() > highestPlayers) {
-                bestServer = gameServer;
-                highestPlayers = gameServer.getPlayerCount();
+            RedisGameServer gameServer = serverManager.getRedisGameServer(miniGameInstances.getServerId());
+            if (gameServer.isScheduledForStop()) continue;
+
+            if (miniGameInstances.getPlayerCount() < miniGameInstances.getMaxPlayers() && miniGameInstances.getPlayerCount() > highestPlayers) {
+                bestMiniGameInstance = miniGameInstances;
+                highestPlayers = miniGameInstances.getPlayerCount();
             }
         }
 
-        return bestServer;
+        return bestMiniGameInstance;
     }
 
     private record ServerMoveRequest(String serverTemplateName, long time) { }
