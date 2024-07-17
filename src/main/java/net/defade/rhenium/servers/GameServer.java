@@ -47,11 +47,11 @@ public class GameServer {
         String serverRedisKey = RedisConstants.GAME_SERVER_KEY.apply(serverId);
 
         Map<String, String> serverInfos = Map.of(
-                RedisConstants.GAME_SERVER_RHENIUM_INSTANCE, rhenium.getRheniumId(),
+                RedisConstants.GAME_SERVER_RHENIUM_INSTANCE_ID, rhenium.getRheniumId(),
                 RedisConstants.GAME_SERVER_STARTED, "false",
                 RedisConstants.GAME_SERVER_POWER, String.valueOf(serverTemplate.getPower()),
                 RedisConstants.GAME_SERVER_PORT, String.valueOf(port),
-                RedisConstants.GAME_SERVER_PLAYERS_COUNT, "0",
+                RedisConstants.GAME_SERVER_PLAYER_COUNT, "0",
                 RedisConstants.GAME_SERVER_MAX_PLAYERS, String.valueOf(serverTemplate.getMaxPlayers()),
                 RedisConstants.GAME_SERVER_SCHEDULED_FOR_STOP, "false",
                 RedisConstants.GAME_SERVER_OUTDATED, "false"
@@ -61,8 +61,8 @@ public class GameServer {
         String rheniumIdKey = RedisConstants.RHENIUM_CLIENT_KEY.apply(rhenium.getRheniumId());
         rhenium.getJedisPool().hset(
                 rheniumIdKey,
-                RedisConstants.RHENIUM_USED_POWER,
-                String.valueOf(Integer.parseInt(rhenium.getJedisPool().hget(rheniumIdKey, RedisConstants.RHENIUM_USED_POWER)) + serverTemplate.getPower())
+                RedisConstants.RHENIUM_CLIENT_USED_POWER,
+                String.valueOf(Integer.parseInt(rhenium.getJedisPool().hget(rheniumIdKey, RedisConstants.RHENIUM_CLIENT_USED_POWER)) + serverTemplate.getPower())
         );
 
         ProcessBuilder processBuilder = new ProcessBuilder(generateStartCommand(serverId, port, rhenium.getRheniumConfig()));
@@ -124,8 +124,8 @@ public class GameServer {
         String rheniumIdKey = RedisConstants.RHENIUM_CLIENT_KEY.apply(rhenium.getRheniumId());
         rhenium.getJedisPool().hset(
                 rheniumIdKey,
-                RedisConstants.RHENIUM_USED_POWER,
-                String.valueOf(Integer.parseInt(rhenium.getJedisPool().hget(rheniumIdKey, RedisConstants.RHENIUM_USED_POWER)) - serverTemplate.getPower())
+                RedisConstants.RHENIUM_CLIENT_USED_POWER,
+                String.valueOf(Integer.parseInt(rhenium.getJedisPool().hget(rheniumIdKey, RedisConstants.RHENIUM_CLIENT_USED_POWER)) - serverTemplate.getPower())
         );
 
         rhenium.getJedisPool().del(RedisConstants.GAME_SERVER_KEY.apply(serverId));

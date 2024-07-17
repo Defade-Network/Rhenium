@@ -18,9 +18,9 @@ public class RedisRheniumInstance {
         this.rheniumId = rheniumId;
 
         Map<String, String> rheniumInfos = jedis.hgetAll(RedisConstants.RHENIUM_CLIENT_KEY.apply(rheniumId));
-        this.usedPower = Integer.parseInt(rheniumInfos.get(RedisConstants.RHENIUM_USED_POWER));
-        this.availablePower = Integer.parseInt(rheniumInfos.get(RedisConstants.RHENIUM_AVAILABLE_POWER));
-        this.ipAddress = rheniumInfos.get(RedisConstants.RHENIUM_PUBLIC_IP_ADDRESS);
+        this.usedPower = Integer.parseInt(rheniumInfos.get(RedisConstants.RHENIUM_CLIENT_USED_POWER));
+        this.availablePower = Integer.parseInt(rheniumInfos.get(RedisConstants.RHENIUM_CLIENT_AVAILABLE_POWER));
+        this.ipAddress = rheniumInfos.get(RedisConstants.RHENIUM_CLIENT_PUBLIC_IP_ADDRESS);
     }
 
     public String getRheniumId() {

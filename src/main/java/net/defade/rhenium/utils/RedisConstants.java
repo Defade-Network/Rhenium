@@ -3,21 +3,34 @@ package net.defade.rhenium.utils;
 import java.util.function.Function;
 
 public class RedisConstants {
+
+    // ==========================================================
+    //                      Seed Management
+    // ==========================================================
+
     /**
      * Key to store a seed for random values that must be unique across the network.
      * Always call incr so that the seed is always different.
      */
     public static final String SEED_GENERATOR_KEY = "rhenium:seed";
 
+    // ==========================================================
+    //                    Leader Management
+    // ==========================================================
+
     /**
      * ID of the current leader of the swarm.
      */
     public static final String LEADER_ID = "rhenium:leader";
 
+    // ==========================================================
+    //                    Client Management
+    // ==========================================================
+
     /**
      * Amount of time the rhenium instances have to update their status.
      */
-    public static final int RHENIUM_CLIENT_TIMEOUT = 5000;
+    public static final int RHENIUM_CLIENT_TIMEOUT_MS = 5000;
 
     /**
      * Provides the key to store the client information. The id is the unique identifier of the client.
@@ -27,17 +40,21 @@ public class RedisConstants {
     /**
      * The public IP address of a client which will be used by the proxy to connect to the servers.
      */
-    public static final String RHENIUM_PUBLIC_IP_ADDRESS = "ip-address";
+    public static final String RHENIUM_CLIENT_PUBLIC_IP_ADDRESS = "ip-address";
 
     /**
      * The amount of power available for a rhenium client.
      */
-    public static final String RHENIUM_AVAILABLE_POWER = "available-power";
+    public static final String RHENIUM_CLIENT_AVAILABLE_POWER = "available-power";
 
     /**
      * The amount of power used by a rhenium client.
      */
-    public static final String RHENIUM_USED_POWER = "used-power";
+    public static final String RHENIUM_CLIENT_USED_POWER = "used-power";
+
+    // ==========================================================
+    //                Game Server Management
+    // ==========================================================
 
     /**
      * Provides the key to store a game server information. The id is the unique identifier of the game server.
@@ -47,7 +64,7 @@ public class RedisConstants {
     /**
      * The key which holds the rhenium id running the game server.
      */
-    public static final String GAME_SERVER_RHENIUM_INSTANCE = "rhenium-instance";
+    public static final String GAME_SERVER_RHENIUM_INSTANCE_ID = "rhenium-instance";
 
     /**
      * The key which holds whether a game server has started or not and is ready to accept players.
@@ -67,7 +84,7 @@ public class RedisConstants {
     /**
      * The key which holds the amount of online players for a game server.
      */
-    public static final String GAME_SERVER_PLAYERS_COUNT = "players-count";
+    public static final String GAME_SERVER_PLAYER_COUNT = "players-count";
 
     /**
      * The key which holds the maximum amount of players for a game server.
@@ -84,33 +101,41 @@ public class RedisConstants {
      */
     public static final String GAME_SERVER_OUTDATED = "outdated";
 
-    /**
-     * Pub/Sub channel to notify that a server has been created.
-     */
-    public static final String GAME_SERVER_CREATE_CHANNEL = "rhenium:game_server_create";
+    // ==========================================================
+    //        Pub/Sub Channels for Game Server Management
+    // ==========================================================
 
     /**
-     * Pub/Sub channel to acknowledge that a server has been created.
+     * Pub/Sub channel to ask the creation of a server.
      */
-    public static final String GAME_SERVER_CREATE_ACKNOWLEDGE_CHANNEL = "rhenium:game_server_create_acknowledge";
+    public static final String CHANNEL_GAME_SERVER_CREATE = "rhenium:game_server_create";
+
+    /**
+     * Pub/Sub channel to acknowledge that a server must be created.
+     */
+    public static final String CHANNEL_GAME_SERVER_CREATION_ACK = "rhenium:game_server_creation_acknowledge";
 
     /**
      * Pub/Sub channel to notify that a server has been marked for stop.
      */
-    public static final String GAME_SERVER_MARKED_FOR_STOP_CHANNEL = "rhenium:game_server_marked_for_stop";
+    public static final String CHANNEL_GAME_SERVER_MARKED_FOR_STOP = "rhenium:game_server_marked_for_stop";
 
     /**
      * Pub/Sub channel to stop a server.
      */
-    public static final String GAME_SERVER_STOP_CHANNEL = "rhenium:game_server_stop";
+    public static final String CHANNEL_GAME_SERVER_STOP = "rhenium:game_server_stop";
+
+    // ==========================================================
+    //           Pub/Sub Channels for Player Management
+    // ==========================================================
 
     /**
-     * Pub/Sub channel to receive requests to move a player to a server
+     * Pub/Sub channel to receive requests to move a player to a server.
      */
-    public static final String PLAYER_SEND_TO_SERVER_REQUEST_CHANNEL = "rhenium:player_send_to_server_request";
+    public static final String CHANNEL_PLAYER_MOVE_REQUEST = "rhenium:player_send_to_server_request";
 
     /**
-     * Pub/Sub channel to send a player to a server with the proxy
+     * Pub/Sub channel to send a player to a server with the proxy.
      */
-    public static final String PLAYER_SEND_TO_SERVER_PROXY_CHANNEL = "rhenium:player_send_to_server_proxy";
+    public static final String CHANNEL_PLAYER_MOVE_PROXY = "rhenium:player_send_to_server_proxy";
 }

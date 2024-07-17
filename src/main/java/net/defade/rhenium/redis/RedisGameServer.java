@@ -26,13 +26,13 @@ public class RedisGameServer {
         this.serverId = serverId;
 
         Map<String, String> serverInfos = jedis.hgetAll(RedisConstants.GAME_SERVER_KEY.apply(serverId));
-        this.rheniumInstance = serverInfos.get(RedisConstants.GAME_SERVER_RHENIUM_INSTANCE);
+        this.rheniumInstance = serverInfos.get(RedisConstants.GAME_SERVER_RHENIUM_INSTANCE_ID);
         this.started = Boolean.parseBoolean(serverInfos.get(RedisConstants.GAME_SERVER_STARTED));
         this.port = Integer.parseInt(serverInfos.get(RedisConstants.GAME_SERVER_PORT));
         this.isScheduledForStop = Boolean.parseBoolean(serverInfos.get(RedisConstants.GAME_SERVER_SCHEDULED_FOR_STOP));
         this.isOutdated = Boolean.parseBoolean(serverInfos.get(RedisConstants.GAME_SERVER_OUTDATED));
         this.power = Integer.parseInt(serverInfos.get(RedisConstants.GAME_SERVER_POWER));
-        this.playerCount = Integer.parseInt(serverInfos.get(RedisConstants.GAME_SERVER_PLAYERS_COUNT));
+        this.playerCount = Integer.parseInt(serverInfos.get(RedisConstants.GAME_SERVER_PLAYER_COUNT));
         this.maxPlayers = Integer.parseInt(serverInfos.get(RedisConstants.GAME_SERVER_MAX_PLAYERS));
     }
 
@@ -60,7 +60,7 @@ public class RedisGameServer {
         this.isScheduledForStop = isScheduledForStop;
 
         jedis.hset(RedisConstants.GAME_SERVER_KEY.apply(serverId), RedisConstants.GAME_SERVER_SCHEDULED_FOR_STOP, String.valueOf(isScheduledForStop));
-        jedis.publish(RedisConstants.GAME_SERVER_MARKED_FOR_STOP_CHANNEL, serverId);
+        jedis.publish(RedisConstants.CHANNEL_GAME_SERVER_MARKED_FOR_STOP, serverId);
     }
 
     public boolean isOutdated() {

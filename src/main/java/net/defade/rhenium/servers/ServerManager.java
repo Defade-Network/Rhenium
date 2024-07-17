@@ -132,9 +132,9 @@ public class ServerManager {
             // The client is not registered in Redis
             // This can either be a new client or the key has expired due to a network issue/lag. We must stop all servers and cleanly restart.
             Map<String, String> infos = Map.of(
-                    RedisConstants.RHENIUM_PUBLIC_IP_ADDRESS, rhenium.getRheniumConfig().getPublicServerIp(),
-                    RedisConstants.RHENIUM_AVAILABLE_POWER, String.valueOf(rhenium.getRheniumConfig().getAvailablePower()),
-                    RedisConstants.RHENIUM_USED_POWER, "0"
+                    RedisConstants.RHENIUM_CLIENT_PUBLIC_IP_ADDRESS, rhenium.getRheniumConfig().getPublicServerIp(),
+                    RedisConstants.RHENIUM_CLIENT_AVAILABLE_POWER, String.valueOf(rhenium.getRheniumConfig().getAvailablePower()),
+                    RedisConstants.RHENIUM_CLIENT_USED_POWER, "0"
             );
 
             rhenium.getJedisPool().hset(rheniumClientKey, infos);
@@ -142,7 +142,7 @@ public class ServerManager {
             if (!gameServers.isEmpty()) stop();
         }
 
-        rhenium.getJedisPool().pexpire(rheniumClientKey, RedisConstants.RHENIUM_CLIENT_TIMEOUT); // Renew the client key expiration
+        rhenium.getJedisPool().pexpire(rheniumClientKey, RedisConstants.RHENIUM_CLIENT_TIMEOUT_MS); // Renew the client key expiration
     }
 
     private void listenForServerEvents() {
@@ -151,7 +151,7 @@ public class ServerManager {
                 @Override
                 public void onMessage(String channel, String message) {
                     switch (channel) {
-                        case RedisConstants.GAME_SERVER_CREATE_CHANNEL -> {
+                        case RedisConstants.CHANNEL_GAME_SERVER_CREATE -> {
                             String[] parts = message.split(",");
                             String templateName = parts[0];
                             String rheniumInstance = parts[1];
@@ -167,7 +167,7 @@ public class ServerManager {
                                 startServer(serverTemplate, serverId);
                             }
                         }
-                        case RedisConstants.GAME_SERVER_CREATE_ACKNOWLEDGE_CHANNEL -> {
+                        case RedisConstants.CHANNEL_GAME_SERVER_CREATION_ACK -> {
                             String[] parts = message.split(",");
                             String templateName = parts[0];
                             String serverId = parts[1];
@@ -176,7 +176,7 @@ public class ServerManager {
                                 serverCreationRequests.get(templateName).removeIf(request -> request.serverId().equals(serverId));
                             }
                         }
-                        case RedisConstants.GAME_SERVER_STOP_CHANNEL -> {
+                        case RedisConstants.CHANNEL_GAME_SERVER_STOP -> {
                             GameServer gameServer = gameServers.get(message);
                             if (gameServer != null) {
                                 gameServer.stop(false);
@@ -184,7 +184,7 @@ public class ServerManager {
                         }
                     }
                 }
-            }, RedisConstants.GAME_SERVER_CREATE_CHANNEL, RedisConstants.GAME_SERVER_CREATE_ACKNOWLEDGE_CHANNEL, RedisConstants.GAME_SERVER_STOP_CHANNEL);
+            }, RedisConstants.CHANNEL_GAME_SERVER_CREATE, RedisConstants.CHANNEL_GAME_SERVER_CREATION_ACK, RedisConstants.CHANNEL_GAME_SERVER_STOP);
         });
     }
 
@@ -264,7 +264,7 @@ public class ServerManager {
 
             String rheniumInstance = gameServer.getRheniumInstance();
             if (!stopRequests.containsKey(serverId) && !rhenium.getJedisPool().exists(RedisConstants.RHENIUM_CLIENT_KEY.apply(rheniumInstance))) {
-                rhenium.getJedisPool().publish(RedisConstants.GAME_SERVER_STOP_CHANNEL, serverId);
+                rhenium.getJedisPool().publish(RedisConstants.CHANNEL_GAME_SERVER_STOP, serverId);
                 rhenium.getJedisPool().del(RedisConstants.GAME_SERVER_KEY.apply(serverId)); // Since the rhenium instance is dead, the key won't be cleaned by it
                 LOGGER.info("Found an orphan server: {}", serverId);
             }
@@ -359,13 +359,13 @@ public class ServerManager {
         }
 
         serverCreationRequests.get(serverTemplate.getTemplateName()).add(new ServerCreationRequest(selectedRheniumInstance.getRheniumId(), serverTemplate.getPower(), serverId));
-        rhenium.getJedisPool().publish(RedisConstants.GAME_SERVER_CREATE_CHANNEL, serverTemplate.getTemplateName() + "," + selectedRheniumInstance.getRheniumId() + "," + serverId);
+        rhenium.getJedisPool().publish(RedisConstants.CHANNEL_GAME_SERVER_CREATE, serverTemplate.getTemplateName() + "," + selectedRheniumInstance.getRheniumId() + "," + serverId);
 
         LOGGER.info("Sent a server creation request for the server {} to the Rhenium instance {}.", serverId, selectedRheniumInstance.getRheniumId());
     }
 
     private void stopServer(String serverId) {
-        rhenium.getJedisPool().publish(RedisConstants.GAME_SERVER_STOP_CHANNEL, serverId);
+        rhenium.getJedisPool().publish(RedisConstants.CHANNEL_GAME_SERVER_STOP, serverId);
         stopRequests.put(serverId, System.currentTimeMillis());
     }
 
@@ -378,14 +378,14 @@ public class ServerManager {
         int port = findUnusedPort();
         if (port == -1) {
             LOGGER.error("Failed to find an unused port for the server {}.", serverId);
-            rhenium.getJedisPool().publish(RedisConstants.GAME_SERVER_CREATE_ACKNOWLEDGE_CHANNEL, serverTemplate.getTemplateName() + "," + serverId);
+            rhenium.getJedisPool().publish(RedisConstants.CHANNEL_GAME_SERVER_CREATION_ACK, serverTemplate.getTemplateName() + "," + serverId);
             return;
         }
 
         GameServer gameServer = new GameServer(rhenium, this, serverTemplate, serverId, port);
         gameServer.launchServer();
         LOGGER.info("Started the server {} on port {}.", serverId, port);
-        rhenium.getJedisPool().publish(RedisConstants.GAME_SERVER_CREATE_ACKNOWLEDGE_CHANNEL, serverTemplate.getTemplateName() + "," + serverId);
+        rhenium.getJedisPool().publish(RedisConstants.CHANNEL_GAME_SERVER_CREATION_ACK, serverTemplate.getTemplateName() + "," + serverId);
 
         gameServers.put(serverId, gameServer);
     }

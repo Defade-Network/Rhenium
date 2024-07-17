@@ -39,18 +39,15 @@ public class PlayerServerDispatcher {
                     String serverTemplateName = parts[1];
 
                     ServerTemplate serverTemplate = serverTemplateManager.getServerTemplate(serverTemplateName);
-                    if (serverTemplate == null) {
-                        playerServerRequests.put(uuid, new ServerMoveRequest(serverTemplateName, System.currentTimeMillis())); // Store the request for later retry
-                        return;
-                    }
-
-                    // Find the server with the most players
                     RedisGameServer targetServer = findBestServer(serverTemplate);
-                    if (targetServer != null) {
-                        rhenium.getJedisPool().publish(RedisConstants.PLAYER_SEND_TO_SERVER_PROXY_CHANNEL, uuid + "," + targetServer.getServerId());
+
+                    if (targetServer == null) {
+                        playerServerRequests.put(uuid, new ServerMoveRequest(serverTemplateName, System.currentTimeMillis())); // Store the request for later retry
+                    } else {
+                        rhenium.getJedisPool().publish(RedisConstants.CHANNEL_PLAYER_MOVE_PROXY, uuid + "," + targetServer.getServerId());
                     }
                 }
-            }, RedisConstants.PLAYER_SEND_TO_SERVER_REQUEST_CHANNEL);
+            }, RedisConstants.CHANNEL_PLAYER_MOVE_REQUEST);
         });
     }
 
@@ -65,19 +62,19 @@ public class PlayerServerDispatcher {
             }
 
             ServerTemplate serverTemplate = serverTemplateManager.getServerTemplate(request.serverTemplateName);
-            if (serverTemplate == null) return false;
-
             RedisGameServer targetServer = findBestServer(serverTemplate);
-            if (targetServer != null) {
-                rhenium.getJedisPool().publish(RedisConstants.PLAYER_SEND_TO_SERVER_PROXY_CHANNEL, uuid + "," + targetServer.getServerId());
-                return true;
+            if (targetServer == null) {
+                return false;
             }
 
-            return false;
+            rhenium.getJedisPool().publish(RedisConstants.CHANNEL_PLAYER_MOVE_PROXY, uuid + "," + targetServer.getServerId());
+            return true;
         });
     }
 
     private RedisGameServer findBestServer(ServerTemplate serverTemplate) {
+        if (serverTemplate == null) return null;
+
         RedisGameServer bestServer = null;
         int highestPlayers = -1;
 
