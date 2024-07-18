@@ -140,7 +140,7 @@ public class ServerManager {
      */
     public List<RedisMiniGameInstance> getAllRedisMiniGameInstances(ServerTemplate serverTemplate) {
         List<RedisMiniGameInstance> redisMiniGameInstances = new ArrayList<>();
-        for (String miniGameInstancesKey : rhenium.getJedisPool().keys(RedisConstants.MINI_GAME_INSTANCE_KEY.apply(serverTemplate.getTemplateName() + "*", null))) {
+        for (String miniGameInstancesKey : rhenium.getJedisPool().keys(RedisConstants.MINI_GAME_INSTANCE_KEY.apply(serverTemplate.getTemplateName() + "*", "*"))) {
             String serverId = miniGameInstancesKey.split(":")[2];
             UUID miniGameInstanceId = UUID.fromString(miniGameInstancesKey.split(":")[3]);
             redisMiniGameInstances.add(new RedisMiniGameInstance(rhenium.getJedisPool(), serverId, miniGameInstanceId));
@@ -292,8 +292,7 @@ public class ServerManager {
             String rheniumInstance = gameServer.getRheniumInstance();
             if (!stopRequests.containsKey(serverId) && !rhenium.getJedisPool().exists(RedisConstants.RHENIUM_CLIENT_KEY.apply(rheniumInstance))) {
                 rhenium.getJedisPool().publish(RedisConstants.CHANNEL_GAME_SERVER_STOP, serverId);
-                rhenium.getJedisPool().del(RedisConstants.GAME_SERVER_KEY.apply(serverId)); // Since the rhenium instance is dead, the key won't be cleaned by it
-                rhenium.getJedisPool().del(RedisConstants.MINI_GAME_INSTANCE_KEY.apply(serverId, "*"));
+                Utils.fullyDeleteGameServer(rhenium.getJedisPool(), serverId); // Since the rhenium instance is dead, the key won't be cleaned by it
                 LOGGER.info("Found an orphan server: {}", serverId);
             }
         }

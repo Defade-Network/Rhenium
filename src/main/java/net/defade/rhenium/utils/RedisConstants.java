@@ -106,8 +106,7 @@ public class RedisConstants {
      * and the miniGameInstanceUUID is the unique identifier of the mini-game instance.
      */
     public static BiFunction<String, String, String> MINI_GAME_INSTANCE_KEY =
-            (serverId, miniGameInstanceUUID) -> "rhenium:mini-game-instance:" + serverId
-                    + (miniGameInstanceUUID == null ? "" : ":" + miniGameInstanceUUID);
+            (serverId, miniGameInstanceUUID) -> "rhenium:mini-game-instance:" + serverId + ":" + miniGameInstanceUUID;
 
     /**
      * The key which holds the amount of players in a mini-game instance.

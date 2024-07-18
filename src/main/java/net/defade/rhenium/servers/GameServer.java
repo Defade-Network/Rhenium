@@ -4,6 +4,7 @@ import net.defade.rhenium.Rhenium;
 import net.defade.rhenium.config.RheniumConfig;
 import net.defade.rhenium.servers.template.ServerTemplate;
 import net.defade.rhenium.utils.RedisConstants;
+import net.defade.rhenium.utils.Utils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -127,8 +128,7 @@ public class GameServer {
                 String.valueOf(Integer.parseInt(rhenium.getJedisPool().hget(rheniumIdKey, RedisConstants.RHENIUM_CLIENT_USED_POWER)) - serverTemplate.getPower())
         );
 
-        rhenium.getJedisPool().del(RedisConstants.GAME_SERVER_KEY.apply(serverId));
-        rhenium.getJedisPool().del(RedisConstants.MINI_GAME_INSTANCE_KEY.apply(serverId, "*"));
+        Utils.fullyDeleteGameServer(rhenium.getJedisPool(), serverId);
         serverManager.unregisterServer(this);
 
         compressLogFile();
