@@ -30,5 +30,6 @@ public class Utils {
         miniGameInstances.forEach(transaction::del);
 
         transaction.exec();
+        transaction.close();
     }
 }
