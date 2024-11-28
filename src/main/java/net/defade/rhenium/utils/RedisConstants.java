@@ -105,24 +105,30 @@ public class RedisConstants {
      * Provides the key to store a mini-game instance information. The serverId is the unique identifier of the server
      * and the miniGameInstanceUUID is the unique identifier of the mini-game instance.
      */
-    public static BiFunction<String, String, String> MINI_GAME_INSTANCE_KEY =
+    public static final BiFunction<String, String, String> MINI_GAME_INSTANCE_KEY =
             (serverId, miniGameInstanceUUID) -> "rhenium:mini-game-instance:" + serverId + ":" + miniGameInstanceUUID;
 
     /**
      * The key which holds the amount of players in a mini-game instance.
      */
-    public static String MINI_GAME_INSTANCE_PLAYER_COUNT = "player-count";
+    public static final String MINI_GAME_INSTANCE_PLAYER_COUNT = "player-count";
 
     /**
      * The key which holds the maximum amount of players in a mini-game instance.
      */
-    public static String MINI_GAME_INSTANCE_MAX_PLAYERS = "max-players";
+    public static final String MINI_GAME_INSTANCE_MAX_PLAYERS = "max-players";
 
     /**
      * The key which holds whether a mini-game instance is accepting players or not.
      */
-    public static String MINI_GAME_INSTANCE_ACCEPTING_PLAYERS = "accept-players";
+    public static final String MINI_GAME_INSTANCE_ACCEPTING_PLAYERS = "accept-players";
 
+    public static final String MINI_GAME_INSTANCE_REQUIRE_PLAYING_PLAYERS_TO_REJOIN = "require-playing-players-to-rejoin";
+
+    /**
+     * Hashset key which holds the UUIDs of the players that are playing in a mini-game instance.
+     */
+    public static final String PLAYERS_LAST_MINI_GAME_INSTANCE_KEY = "playing-players-last-mini-game-instance";
 
     // ==========================================================
     //        Pub/Sub Channels for Game Server Management
@@ -151,6 +157,11 @@ public class RedisConstants {
     // ==========================================================
     //           Pub/Sub Channels for Player Management
     // ==========================================================
+
+    /**
+     * Pub/Sub channel to receive requests to move a player to a server when the player joins the proxy.
+     */
+    public static final String CHANNEL_PLAYER_SERVER_JOIN_REQUEST = "rhenium:player_server_join_request";
 
     /**
      * Pub/Sub channel to receive requests to move a player to a server.

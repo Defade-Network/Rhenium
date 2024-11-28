@@ -133,20 +133,25 @@ public class ServerManager {
         return redisGameServers;
     }
 
+    public RedisMiniGameInstance getRedisMiniGameInstance(String key) {
+        String serverId = key.split(":")[2];
+        UUID miniGameInstanceId = UUID.fromString(key.split(":")[3]);
+
+        try {
+            return new RedisMiniGameInstance(rhenium.getJedisPool(), serverId, miniGameInstanceId);
+        } catch (IllegalArgumentException exception) {
+            return null;
+        }
+    }
+
     /**
      * Get all the mini-game instances registered in Redis for a specific server template.
      * @param serverTemplate The server template to get the servers from
      * @return A list of RedisMiniGameInstance
      */
     public List<RedisMiniGameInstance> getAllRedisMiniGameInstances(ServerTemplate serverTemplate) {
-        List<RedisMiniGameInstance> redisMiniGameInstances = new ArrayList<>();
-        for (String miniGameInstancesKey : rhenium.getJedisPool().keys(RedisConstants.MINI_GAME_INSTANCE_KEY.apply(serverTemplate.getTemplateName() + "*", "*"))) {
-            String serverId = miniGameInstancesKey.split(":")[2];
-            UUID miniGameInstanceId = UUID.fromString(miniGameInstancesKey.split(":")[3]);
-            redisMiniGameInstances.add(new RedisMiniGameInstance(rhenium.getJedisPool(), serverId, miniGameInstanceId));
-        }
-
-        return redisMiniGameInstances;
+        return rhenium.getJedisPool().keys(RedisConstants.MINI_GAME_INSTANCE_KEY.apply(serverTemplate.getTemplateName() + "*", "*"))
+            .stream().map(this::getRedisMiniGameInstance).toList();
     }
 
     /**

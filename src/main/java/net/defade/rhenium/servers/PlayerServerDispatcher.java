@@ -14,7 +14,7 @@ import java.util.Map;
 
 public class PlayerServerDispatcher {
     private static final Logger LOGGER = LogManager.getLogger(PlayerServerDispatcher.class);
-    private static final int MAX_WAIT_TIME = 15000; // If the player is not moved within 5 seconds, cancel the request
+    private static final int MAX_WAIT_TIME = 15000; // If the player is not moved within 15 seconds, cancel the request
 
     private final Rhenium rhenium;
     private final ServerTemplateManager serverTemplateManager;
@@ -35,21 +35,33 @@ public class PlayerServerDispatcher {
                 public void onMessage(String channel, String message) {
                     if (!rhenium.isLeader()) return;
 
+                    if (channel.equals(RedisConstants.CHANNEL_PLAYER_SERVER_JOIN_REQUEST)) {
+                        String[] parts = message.split(",");
+                        String playerUUID = parts[0];
+                        String requestedServerTemplateName = parts.length == 1 ? "hub" : parts[1];
+
+                        // Find if the player was previously in a mini-game instance and if the mini-game instance is still running/requires players to rejoin
+                        String miniGameInstanceId = rhenium.getJedisPool().hget(RedisConstants.PLAYERS_LAST_MINI_GAME_INSTANCE_KEY, playerUUID);
+                        if (miniGameInstanceId != null) {
+                            RedisMiniGameInstance miniGameInstance = serverManager.getRedisMiniGameInstance(miniGameInstanceId);
+                            if (miniGameInstance != null && miniGameInstance.requirePlayingPlayersToRejoin()) {
+                                sendPlayerToMiniGameInstance(playerUUID, miniGameInstance);
+                                return;
+                            }
+                        }
+
+                        movePlayerToServerTemplate(playerUUID, serverTemplateManager.getServerTemplate(requestedServerTemplateName));
+                        return;
+                    }
+
                     String[] parts = message.split(",");
-                    String uuid = parts[0];
+                    String playerUUID = parts[0];
                     String serverTemplateName = parts[1];
 
                     ServerTemplate serverTemplate = serverTemplateManager.getServerTemplate(serverTemplateName);
-                    RedisMiniGameInstance targetMiniGameInstance = findBestMiniGameInstance(serverTemplate);
-
-                    if (targetMiniGameInstance == null) {
-                        playerServerRequests.put(uuid, new ServerMoveRequest(serverTemplateName, System.currentTimeMillis())); // Store the request for later retry
-                    } else {
-                        rhenium.getJedisPool().publish(RedisConstants.CHANNEL_PLAYER_MOVE_PROXY,
-                                uuid + "," + targetMiniGameInstance.getServerId() + "," + targetMiniGameInstance.getMiniGameInstanceId().toString());
-                    }
+                    movePlayerToServerTemplate(playerUUID, serverTemplate);
                 }
-            }, RedisConstants.CHANNEL_PLAYER_MOVE_REQUEST);
+            }, RedisConstants.CHANNEL_PLAYER_SERVER_JOIN_REQUEST, RedisConstants.CHANNEL_PLAYER_MOVE_REQUEST);
         });
     }
 
@@ -75,6 +87,11 @@ public class PlayerServerDispatcher {
         });
     }
 
+    public void sendPlayerToMiniGameInstance(String playerUUID, RedisMiniGameInstance miniGameInstance) {
+        rhenium.getJedisPool().publish(RedisConstants.CHANNEL_PLAYER_MOVE_PROXY,
+            playerUUID + "," + miniGameInstance.getServerId() + "," + miniGameInstance.getMiniGameInstanceId().toString());
+    }
+
     private RedisMiniGameInstance findBestMiniGameInstance(ServerTemplate serverTemplate) {
         if (serverTemplate == null) return null;
 
@@ -94,6 +111,22 @@ public class PlayerServerDispatcher {
         }
 
         return bestMiniGameInstance;
+    }
+
+    private void movePlayerToServerTemplate(String playerUUID, ServerTemplate serverTemplate) {
+        if (serverTemplate == null) {
+            LOGGER.warn("Failed to move player {} to a server, the server template is null.", playerUUID); // TODO: disonnect the player
+            return;
+        }
+
+        RedisMiniGameInstance targetMiniGameInstance = findBestMiniGameInstance(serverTemplate);
+
+        if (targetMiniGameInstance == null) {
+            playerServerRequests.put(playerUUID, new ServerMoveRequest(serverTemplate.getTemplateName(), System.currentTimeMillis())); // Store the request for later retry
+        } else {
+            rhenium.getJedisPool().publish(RedisConstants.CHANNEL_PLAYER_MOVE_PROXY,
+                playerUUID + "," + targetMiniGameInstance.getServerId() + "," + targetMiniGameInstance.getMiniGameInstanceId().toString());
+        }
     }
 
     private record ServerMoveRequest(String serverTemplateName, long time) { }
