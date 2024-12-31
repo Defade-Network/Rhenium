@@ -1,20 +1,19 @@
 package net.defade.rhenium;
 
-import com.mongodb.ConnectionString;
-import com.mongodb.client.MongoClient;
-import com.mongodb.client.MongoClients;
-import com.mongodb.client.MongoDatabase;
+import io.kubernetes.client.openapi.ApiClient;
+import io.kubernetes.client.openapi.ApiException;
+import io.kubernetes.client.openapi.Configuration;
+import io.kubernetes.client.openapi.apis.CoreV1Api;
+import io.kubernetes.client.openapi.models.V1Namespace;
+import io.kubernetes.client.openapi.models.V1ObjectMeta;
+import io.kubernetes.client.util.Config;
 import net.defade.rhenium.config.RheniumConfig;
-import net.defade.rhenium.controller.LeaderTracker;
+import net.defade.rhenium.rest.RestServer;
 import net.defade.rhenium.servers.ServerManager;
-import net.defade.rhenium.servers.template.ServerTemplateManager;
-import net.defade.rhenium.utils.Utils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.bson.BsonDocument;
-import org.bson.BsonInt64;
-import org.bson.conversions.Bson;
-import redis.clients.jedis.JedisPooled;
+
+import java.io.IOException;
 import java.util.Timer;
 
 public class Rhenium {
@@ -22,106 +21,59 @@ public class Rhenium {
 
     private final RheniumConfig rheniumConfig;
 
-    private JedisPooled jedisPool;
-    private MongoClient mongoClient;
-    private MongoDatabase mongoDatabase;
+    private final CoreV1Api k8sApi;
 
-    private String rheniumId;
-
+    private final RestServer restServer;
     private final Timer timer = new Timer();
-    private final ServerTemplateManager serverTemplateManager = new ServerTemplateManager(this);
-    private final LeaderTracker leaderTracker = new LeaderTracker(this);
-    private final ServerManager serverManager = new ServerManager(this);
+    private final ServerManager serverManager;
 
-    public Rhenium(RheniumConfig rheniumConfig) {
+    public Rhenium(RheniumConfig rheniumConfig) throws IOException {
         this.rheniumConfig = rheniumConfig;
+
+        this.restServer = new RestServer("0.0.0.0", 6000); // TODO: make those configurable?
+        this.serverManager = new ServerManager(this);
+
+        ApiClient client = Config.defaultClient();
+        Configuration.setDefaultApiClient(client);
+        this.k8sApi = new CoreV1Api();
     }
 
-    public void start() {
+    public void start() throws ApiException {
         LOGGER.info("Starting Rhenium...");
-        jedisPool = new JedisPooled(rheniumConfig.getRedisHost(), rheniumConfig.getRedisPort(),
-                rheniumConfig.getRedisUser(), rheniumConfig.getRedisPassword());
 
-        // Check if the connection is successful by sending a command
-        try {
-            jedisPool.ping();
-        } catch (Exception e) {
-            LOGGER.error("Failed to connect to the Redis server.");
-            System.exit(1);
+        restServer.start();
+
+        // TODO: check if the k8s client is connected
+        // Check if the k8s namespace exists, if not create it
+        if (k8sApi.listNamespace().execute().getItems().stream().noneMatch(ns -> ns.getMetadata().getName().equals(rheniumConfig.getK8sNamespace()))) {
+            LOGGER.info("Namespace {} does not exist, creating it...", rheniumConfig.getK8sNamespace());
+            k8sApi.createNamespace(new V1Namespace().metadata(new V1ObjectMeta().name(rheniumConfig.getK8sNamespace())));
         }
-        LOGGER.info("Successfully connected to the Redis server.");
 
-        LOGGER.info("Connecting to the MongoDB server...");
-        mongoClient = MongoClients.create(new ConnectionString(rheniumConfig.getMongoConnectionString()));
-        mongoDatabase = mongoClient.getDatabase(rheniumConfig.getMongoDatabase());
-
-        if (!isMongoConnected()) {
-            LOGGER.error("Failed to connect to the MongoDB server.");
-            jedisPool.close();
-            System.exit(1);
-            return;
-        }
-        LOGGER.info("Successfully connected to the MongoDB server.");
-
-        this.rheniumId = "rhenium-" + Utils.generateUniqueNetworkId(jedisPool, 6);
-
-        serverTemplateManager.start();
-        leaderTracker.start();
         serverManager.start();
 
-        LOGGER.info("Rhenium has been started with the id {}.", rheniumId);
+        LOGGER.info("Rhenium has been started.");
         Runtime.getRuntime().addShutdownHook(new Thread(this::stop));
     }
 
     public void stop() {
         LOGGER.info("Shutting down Rhenium...");
-
         timer.cancel();
-        serverTemplateManager.stop();
-        serverManager.stop();
-
-        jedisPool.close();
-        mongoClient.close();
-        LOGGER.info("Rhenium has shut down.");
     }
 
     public RheniumConfig getRheniumConfig() {
         return rheniumConfig;
     }
 
+    public RestServer getRestServer() {
+        return restServer;
+    }
+
+    public CoreV1Api getKubernetesClient() {
+        return k8sApi;
+    }
+
     public Timer getTimer() {
         return timer;
-    }
-
-    public ServerTemplateManager getServerTemplateManager() {
-        return serverTemplateManager;
-    }
-
-    public JedisPooled getJedisPool() {
-        return jedisPool;
-    }
-
-    public MongoDatabase getMongoDatabase() {
-        return mongoDatabase;
-    }
-
-    public String getRheniumId() {
-        return rheniumId;
-    }
-
-    public boolean isLeader() {
-        return leaderTracker.isLeader();
-    }
-
-    private boolean isMongoConnected() {
-        Bson command = new BsonDocument("ping", new BsonInt64(1));
-
-        try {
-            mongoDatabase.runCommand(command);
-        } catch (Exception exception) {
-            return false;
-        }
-
-        return true;
     }
 }

@@ -10,8 +10,5 @@
         <Root level="info" additivity="false">
             <AppenderRef ref="console"/>
         </Root>
-        <Logger name="org.mongodb.driver" level="off" additivity="false">
-            <AppenderRef ref="Out"/>
-        </Logger>
     </Loggers>
 </Configuration>

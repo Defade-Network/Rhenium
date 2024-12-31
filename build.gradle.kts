@@ -17,8 +17,7 @@ dependencies {
 
     implementation("com.electronwill.night-config:toml:3.6.7")
 
-    implementation("redis.clients:jedis:5.1.2")
-    implementation("org.mongodb:mongo-java-driver:3.12.14")
+    implementation("io.kubernetes:client-java:22.0.0")
 }
 
 tasks.jar {

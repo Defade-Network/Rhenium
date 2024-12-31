@@ -1,19 +1,6 @@
-[redis]
-host = "localhost"
-port = 6379
-user = "default"
-password = ""
+[k8s]
+namespace = "defade"
+docker-registry-secret-name = "defade-registry-secret"
 
-[mongodb]
-connection-string = "mongodb://localhost:27017"
-database = "defade"
-
-[network-settings]
-available-power = 200
-
-# The IP address of the server that the proxy will have to use to connect to the servers
-public-server-ip = "127.0.0.1"
-
-# Port range for the servers that are exposed to the internet
-min-servers-port = 25560
-max-servers-port = 25570
+[server-templates]
+"lobby" = { max-players = 100, docker-image="lobby:1.0", cpus = 1, memory = 1024 }
