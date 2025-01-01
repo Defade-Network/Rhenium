@@ -271,37 +271,13 @@ public class ServerManager {
                 .imagePullSecrets(List.of(new V1LocalObjectReference().name(rhenium.getRheniumConfig().getDockerRegistrySecretName())))
             );
 
-        String podIp;
-        try {
-            podIp = rhenium.getKubernetesClient().createNamespacedPod(rhenium.getRheniumConfig().getK8sNamespace(), pod).execute().getStatus().getPodIP();
-            LOGGER.info("Created a new server {}.", serverId);
-        } catch (Exception exception) {
-            LOGGER.error("Failed to create a new server {}.", serverId, exception);
-            return;
-        }
-
-        Utils.sendHTTPRequestToVelocity(
-            rhenium,
-            "/servers/create",
-            "POST",
-            "{\"server-id\":\"" + serverId + "\",\"ip\":\"" + podIp + "\"}"
-        ).exceptionally(throwable -> {
-            LOGGER.error("Failed to notify Velocity about the new server {}.", serverId, throwable);
-            return null;
-        });
+        LOGGER.info("Created a new server {}.", serverId);
     }
 
     private void stopServer(String serverId) {
         try {
             rhenium.getKubernetesClient().deleteNamespacedPod(serverId, rhenium.getRheniumConfig().getK8sNamespace()).execute();
             LOGGER.info("Deleted the server {}.", serverId);
-
-            Utils.sendHTTPRequestToVelocity(
-                rhenium,
-                "/servers/delete",
-                "POST",
-                "{\"server-id\":\"" + serverId + "\"}"
-            );
 
             Utils.sendHTTPRequest(
                 "http://" + Utils.getServerInstanceIp(rhenium.getKubernetesClient(), rhenium.getRheniumConfig().getK8sNamespace(), serverId) + "/server/stop",
