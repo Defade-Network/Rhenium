@@ -271,6 +271,12 @@ public class ServerManager {
                 .imagePullSecrets(List.of(new V1LocalObjectReference().name(rhenium.getRheniumConfig().getDockerRegistrySecretName())))
             );
 
+        try {
+            rhenium.getKubernetesClient().createNamespacedPod(rhenium.getRheniumConfig().getK8sNamespace(), pod).execute();
+        } catch (ApiException exception) {
+            LOGGER.error("Failed to create a new server {}.", serverId, exception);
+            return;
+        }
         LOGGER.info("Created a new server {}.", serverId);
     }
 
